@@ -1,30 +1,67 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
+import ProgressIndicator from '../components/ProgressIndicator.vue'
 
 const route = useRoute()
 const router = useRouter()
 
 const taskId = route.params.taskId as string
 const loading = ref(true)
+const status = ref('')
 const segments = ref<any[]>([])
 const fullText = ref('')
 const duration = ref(0)
+const progress = ref<any>(null)
 const error = ref('')
 
+let es: EventSource | null = null
+
 onMounted(async () => {
+  await loadTask()
+  if (status.value === 'processing' || status.value === 'pending') {
+    subscribeProgress()
+  }
+  loading.value = false
+})
+
+onUnmounted(() => {
+  if (es) es.close()
+})
+
+async function loadTask() {
   try {
     const data = await api.getTranscript(taskId)
+    status.value = data.status
     segments.value = data.segments
     fullText.value = data.full_text
     duration.value = data.duration
   } catch (e: any) {
     error.value = e.message || '加载失败'
-  } finally {
-    loading.value = false
   }
-})
+}
+
+function subscribeProgress() {
+  es = api.streamProgress(
+    taskId,
+    (t) => {
+      progress.value = t.progress
+      status.value = t.status
+    },
+    (t) => {
+      status.value = t.status
+      segments.value = t.result?.segments || []
+      fullText.value = t.result?.full_text || ''
+      duration.value = t.result?.duration || 0
+      progress.value = null
+    },
+    (e) => {
+      error.value = e
+      progress.value = null
+    },
+  )
+}
 
 function formatTime(s: number) {
   const m = Math.floor(s / 60)
@@ -41,14 +78,22 @@ function goToGenerate() {
   <div class="page">
     <div class="header">
       <h1>转录结果</h1>
-      <button class="btn-primary" @click="goToGenerate">生成会议纪要 →</button>
+      <div class="header-actions">
+        <span v-if="status === 'processing'" class="status-badge processing">转写中...</span>
+        <button v-if="status === 'done' && segments.length" class="btn-primary" @click="goToGenerate">生成会议纪要 →</button>
+      </div>
     </div>
 
     <div v-if="loading" class="status-box">加载中...</div>
     <div v-if="error" class="error-box">{{ error }}</div>
 
-    <div v-if="!loading && !error" class="transcript-container">
-      <div class="duration">总时长: {{ formatTime(duration) }}</div>
+    <div v-if="status === 'processing' || status === 'pending'" class="processing-area">
+      <ProgressIndicator v-if="progress" :progress="progress" :task="{ status }" />
+      <div v-else class="status-box">正在处理转写，请稍候...</div>
+    </div>
+
+    <div v-if="status === 'done' && !error" class="transcript-container">
+      <div class="duration" v-if="duration">总时长: {{ formatTime(duration) }}</div>
 
       <div v-for="(seg, i) in segments" :key="i" class="segment">
         <div class="seg-meta">
@@ -58,8 +103,12 @@ function goToGenerate() {
         <div class="seg-text">{{ seg.text }}</div>
       </div>
 
-      <div v-if="!segments.length" class="full-text">
+      <div v-if="!segments.length && fullText" class="full-text">
         <pre>{{ fullText }}</pre>
+      </div>
+
+      <div v-if="!segments.length && !fullText" class="empty-hint">
+        转录完成，但未能解析到文本内容
       </div>
     </div>
   </div>
@@ -75,6 +124,16 @@ function goToGenerate() {
   margin-bottom: 20px;
 }
 h1 { font-size: 24px; }
+
+.header-actions { display: flex; align-items: center; gap: 12px; }
+
+.status-badge {
+  font-size: 13px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-weight: 500;
+}
+.status-badge.processing { background: #fff3cd; color: #856404; }
 
 .btn-primary {
   padding: 10px 20px;
@@ -123,6 +182,8 @@ h1 { font-size: 24px; }
   padding: 20px;
   border-radius: 8px;
 }
+
+.empty-hint { color: #888; text-align: center; padding: 32px; }
 
 .status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; }

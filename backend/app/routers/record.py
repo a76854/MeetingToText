@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 from backend.app.config import settings
 from backend.app.models.schemas import UploadResponse
 from backend.app.services.recorder import recorder_manager
-from backend.app.services.pipeline import create_task, get_task
+from backend.app.services.pipeline import create_task, get_task, run_pipeline
 
 router = APIRouter(prefix="/api", tags=["record"])
 
@@ -46,6 +46,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     audio_path = await recorder_manager.stop_recording(task_id)
     if audio_path and os.path.exists(audio_path):
         task = create_task(filename=os.path.basename(audio_path), audio_path=audio_path)
+        asyncio.create_task(run_pipeline(task.id))
         await websocket.send_text(json.dumps({"status": "done", "task_id": task.id}))
     else:
         await websocket.send_text(json.dumps({"status": "error", "message": "No audio recorded"}))
