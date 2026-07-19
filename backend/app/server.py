@@ -81,7 +81,7 @@ _USER_SETTING_KEYS = {
     "streaming_asr_model_name": str,
 }
 
-_BOOL_KEYS = {"streaming_asr_enabled"}
+_BOOL_KEYS = {"streaming_asr_enabled", "browser_noise_suppression"}
 
 
 def _load_user_settings() -> int:

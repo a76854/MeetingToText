@@ -22,11 +22,13 @@ def _parse_result(result: list) -> list[dict]:
         text = _clean_text(sent.get("text", ""))
         if not text:
             continue
+        start = sent.get("start") or 0
+        end = sent.get("end") or 0
         segments.append({
             "speaker": sent.get("spk", ""),
             "text": text,
-            "start": float(sent.get("start", 0)) / 1000.0,
-            "end": float(sent.get("end", 0)) / 1000.0,
+            "start": float(start) / 1000.0,
+            "end": float(end) / 1000.0,
         })
 
     if not segments:
@@ -44,8 +46,8 @@ def _parse_result(result: list) -> list[dict]:
                     segments.append({
                         "speaker": "",
                         "text": txt,
-                        "start": float(ts[0]) / 1000.0,
-                        "end": float(ts[1]) / 1000.0,
+                        "start": float(ts[0] or 0) / 1000.0,
+                        "end": float(ts[1] or 0) / 1000.0,
                     })
 
     return segments
@@ -79,6 +81,7 @@ class SenseVoiceASR(BaseASR):
             vad_kwargs={"max_single_segment_time": 60000},
             spk_model="cam++",
             device=self.device,
+            disable_update=True,
         )
 
     def transcribe(self, audio_path: str, language: str = "auto") -> list[dict]:

@@ -49,6 +49,7 @@ export interface SettingsData {
   asr_model_name: string
   streaming_asr_enabled: boolean
   streaming_asr_model_name: string
+  browser_noise_suppression: boolean
 }
 
 export interface TaskListItem {

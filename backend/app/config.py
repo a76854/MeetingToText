@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
 
+    browser_noise_suppression: bool = True
+
     @property
     def upload_dir(self) -> str:
         return os.path.join(self.data_dir, "uploads")

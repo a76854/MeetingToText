@@ -1,4 +1,4 @@
-import asyncio
+import threading
 import os
 import time
 import tempfile
@@ -28,7 +28,7 @@ PIPELINE_STEPS = [
     ("asr", "执行语音识别与说话人分离 (ASR + CAM++)"),
 ]
 
-_asr_lock = asyncio.Lock()
+_asr_lock = threading.Lock()
 
 
 def _initial_progress() -> ProgressInfo:
@@ -76,7 +76,7 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
     return tmp_path, original_sr, duration
 
 
-async def run_pipeline(task_id: str):
+def run_pipeline(task_id: str):
     store = get_store()
     task = store.get(task_id)
     if task is None:
@@ -140,7 +140,7 @@ async def run_pipeline(task_id: str):
 
         update_step("queue", "running", "等待前序任务完成...", overall=0.15)
 
-        async with _asr_lock:
+        with _asr_lock:
             update_step("queue", "done", overall=0.2)
 
             update_step("vad", "running", "正在分段...", overall=0.25)

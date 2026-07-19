@@ -10,6 +10,7 @@ export const timer = ref('00:00')
 export const volume = ref(0)
 export const elapsedSec = ref(0)
 export const streamingAsrEnabled = ref(false)
+export const noiseSuppression = ref(true)
 export const liveText = ref('')
 export const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error'>('idle')
 export const liveError = ref('')
@@ -72,7 +73,7 @@ async function releaseWakeLock() {
 
 async function setupAudioWorklet(s: MediaStream) {
   audioCtx = new AudioContext()
-
+  await audioCtx.resume()
   await audioCtx.audioWorklet.addModule('/audio-processor.js')
   workletNode = new AudioWorkletNode(audioCtx, 'recorder-processor')
 
@@ -224,7 +225,13 @@ export async function startRecording(router: any) {
 
   let mediaStream: MediaStream
   try {
-    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: noiseSuppression.value,
+          noiseSuppression: noiseSuppression.value,
+          autoGainControl: noiseSuppression.value,
+        }
+      })
   } catch (e: any) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       try { ws.send(JSON.stringify({ action: 'discard' })) } catch {}
@@ -329,8 +336,10 @@ export async function loadSettings() {
   try {
     const s = await api.getSettings()
     streamingAsrEnabled.value = s.streaming_asr_enabled
+    noiseSuppression.value = s.browser_noise_suppression
   } catch {
     streamingAsrEnabled.value = false
+    noiseSuppression.value = true
   }
 }
 

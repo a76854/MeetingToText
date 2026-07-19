@@ -11,6 +11,7 @@ const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
 const streamingAsrEnabled = ref(false)
 const streamingAsrModelName = ref('paraformer-zh-streaming')
+const noiseSuppression = ref(true)
 const apiKeySet = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -26,6 +27,7 @@ onMounted(async () => {
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
     streamingAsrEnabled.value = s.streaming_asr_enabled
     streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
+    noiseSuppression.value = s.browser_noise_suppression
     apiKeySet.value = s.llm_api_key_set
   } catch (e: any) {
     error.value = e.message
@@ -46,6 +48,7 @@ async function saveSettings() {
       asr_model_name: asrModelName.value,
       streaming_asr_enabled: streamingAsrEnabled.value,
       streaming_asr_model_name: streamingAsrModelName.value,
+      browser_noise_suppression: noiseSuppression.value,
     })
     saved.value = true
     apiKeySet.value = apiKeySet.value || !!llmApiKey.value
@@ -129,6 +132,14 @@ async function clearApiKey() {
       <label v-if="streamingAsrEnabled" class="field">
         <span>流式 ASR 模型名</span>
         <input v-model="streamingAsrModelName" placeholder="paraformer-zh-streaming" class="input" />
+      </label>
+    </div>
+
+    <div class="section">
+      <h2>录制</h2>
+      <label class="field checkbox-field">
+        <input v-model="noiseSuppression" type="checkbox" />
+        <span>浏览器降噪（回声消除、降噪、自动增益）</span>
       </label>
     </div>
 

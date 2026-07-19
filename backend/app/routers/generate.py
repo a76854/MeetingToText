@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 
 from backend.app.config import settings
@@ -38,7 +40,8 @@ async def generate_minutes(req: GenerateRequest):
         user_message += f"\n\n额外要求：{req.custom_instructions}"
 
     llm = get_llm()
-    minutes = llm.generate(
+    minutes = await asyncio.to_thread(
+        llm.generate,
         system_prompt=system_prompt,
         user_message=user_message,
         temperature=settings.llm_temperature,

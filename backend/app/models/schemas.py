@@ -83,6 +83,7 @@ class SettingsUpdate(BaseModel):
     asr_model_name: str | None = None
     streaming_asr_enabled: bool | None = None
     streaming_asr_model_name: str | None = None
+    browser_noise_suppression: bool | None = None
 
 
 class SettingsInfo(BaseModel):
@@ -95,3 +96,4 @@ class SettingsInfo(BaseModel):
     asr_model_name: str = "iic/SenseVoiceSmall"
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
+    browser_noise_suppression: bool = True

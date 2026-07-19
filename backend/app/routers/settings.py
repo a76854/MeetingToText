@@ -39,6 +39,7 @@ async def get_settings():
         asr_model_name=s.get_setting("asr_model_name", settings.asr_model_name),
         streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", "false").lower() == "true"),
         streaming_asr_model_name=s.get_setting("streaming_asr_model_name", settings.streaming_asr_model_name),
+        browser_noise_suppression=(s.get_setting("browser_noise_suppression", "true").lower() != "false"),
     )
 
 
@@ -89,6 +90,7 @@ async def delete_setting(key: str):
         "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
         "asr_model_type", "asr_model_name",
         "streaming_asr_enabled", "streaming_asr_model_name",
+        "browser_noise_suppression",
     }:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")

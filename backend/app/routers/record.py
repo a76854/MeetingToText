@@ -53,7 +53,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
             streaming_session = session
             streaming_ready = True
             for chunk in chunks_to_feed:
-                partial = session.add_pcm_chunk(chunk)
+                partial = await asyncio.to_thread(session.add_pcm_chunk, chunk)
                 if partial:
                     try:
                         await websocket.send_text(json.dumps({
@@ -76,7 +76,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                 await recorder_manager.add_chunk(task_id, chunk)
                 if streaming_ready and streaming_session is not None:
                     try:
-                        partial = streaming_session.add_pcm_chunk(chunk)
+                        partial = await asyncio.to_thread(streaming_session.add_pcm_chunk, chunk)
                         if partial:
                             await websocket.send_text(json.dumps({
                                 "type": "partial",
@@ -120,7 +120,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
 
     if streaming_session is not None:
         try:
-            final_partial = streaming_session.finalize()
+            final_partial = await asyncio.to_thread(streaming_session.finalize)
             if final_partial:
                 await websocket.send_text(json.dumps({
                     "type": "partial",
@@ -133,7 +133,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     audio_path = await recorder_manager.stop_recording(task_id)
     if audio_path and os.path.exists(audio_path):
         task = create_task(filename=os.path.basename(audio_path), audio_path=audio_path)
-        asyncio.create_task(run_pipeline(task.id))
+        asyncio.create_task(asyncio.to_thread(run_pipeline, task.id))
         try:
             await websocket.send_text(json.dumps({"status": "done", "task_id": task.id}, ensure_ascii=False))
         except Exception:
