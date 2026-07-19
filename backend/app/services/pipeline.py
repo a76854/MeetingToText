@@ -2,9 +2,12 @@ import asyncio
 import os
 import time
 import tempfile
+import logging
 import numpy as np
 import soundfile as sf
 import librosa
+
+logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 from backend.app.models.schemas import (
@@ -63,7 +66,9 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
     if original_sr == 16000:
         return audio_path, original_sr, duration
 
-    print(f"[pipeline] Resampling {original_sr}Hz -> 16000Hz ({duration:.1f}s)")
+    logger.info(
+        f"Resampling {original_sr}Hz -> 16000Hz ({duration:.1f}s)"
+    )
     resampled = librosa.resample(audio_data, orig_sr=original_sr, target_sr=16000)
     fd, tmp_path = tempfile.mkstemp(prefix="asr_16k_", suffix=".wav", dir=settings.temp_dir)
     os.close(fd)
@@ -117,8 +122,8 @@ async def run_pipeline(task_id: str):
         rms = float(np.sqrt(np.mean(check_data ** 2)))
         clipped_ratio = float(np.mean(np.abs(check_data) >= 0.99))
 
-        print(
-            f"[pipeline] task={task_id} file={audio_path} "
+        logger.info(
+            f"task={task_id} file={audio_path} "
             f"orig_sr={original_sr}Hz asr_sr={check_sr}Hz "
             f"dur={duration:.1f}s mx={mx:.4f} rms={rms:.4f}"
         )
@@ -143,17 +148,19 @@ async def run_pipeline(task_id: str):
 
             asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
             segments_raw = asr_engine.transcribe(asr_input, language="auto")
-            print(f"[pipeline] ASR returned {len(segments_raw)} segments for task={task_id}")
+            logger.info(f"ASR returned {len(segments_raw)} segments for task={task_id}")
 
             # Fallback: if resampled input yielded 0 segments, retry with the original file
             if not segments_raw and asr_temp_path is not None:
-                print("[pipeline] Resampled input empty, retrying with original audio")
+                logger.info("Resampled input empty, retrying with original audio")
                 segments_raw = asr_engine.transcribe(original_audio_path, language="auto")
-                print(f"[pipeline] Original-audio ASR returned {len(segments_raw)} segments")
+                logger.info(f"Original-audio ASR returned {len(segments_raw)} segments")
 
             if not segments_raw:
-                print(f"[pipeline] WARNING: ASR produced 0 segments for task={task_id}; "
-                      f"audio may be too quiet, in unsupported language, or the model failed to load")
+                logger.warning(
+                    f"ASR produced 0 segments for task={task_id}; "
+                    f"audio may be too quiet, in unsupported language, or the model failed to load"
+                )
 
             update_step("vad", "done", overall=0.8)
             update_step("asr", "done", f"识别完成，共 {len(segments_raw)} 段", overall=1.0)
@@ -182,7 +189,7 @@ async def run_pipeline(task_id: str):
         store.save_result(task_id, result)
 
     except Exception as e:
-        print(f"[pipeline] task={task_id} failed: {e}")
+        logger.error(f"task={task_id} failed: {e}")
         store.update_progress(task_id, TaskStatus.error, str(e))
     finally:
         if asr_temp_path and os.path.exists(asr_temp_path):

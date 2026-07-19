@@ -1,6 +1,9 @@
 import threading
+import logging
 import numpy as np
 import librosa
+
+logger = logging.getLogger(__name__)
 
 
 class StreamingASRSession:
@@ -131,12 +134,12 @@ class StreamingASR:
         with self._load_lock:
             if self.model is None:
                 from funasr import AutoModel
-                print(f"[streaming-asr] Loading model {self.model_name} ...")
+                logger.info(f"Loading model {self.model_name} ...")
                 self.model = AutoModel(
                     model=self.model_name,
                     device=self.device,
                 )
-                print(f"[streaming-asr] Model {self.model_name} loaded")
+                logger.info(f"Model {self.model_name} loaded")
         return self.model
 
     def create_session(self, input_sample_rate: int) -> StreamingASRSession:

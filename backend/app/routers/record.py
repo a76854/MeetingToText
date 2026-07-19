@@ -3,6 +3,10 @@ import uuid
 import json
 import asyncio
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
+import shutil
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
 
@@ -58,9 +62,9 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                         }, ensure_ascii=False))
                     except Exception:
                         break
-            print(f"[record] streaming ASR ready for task={task_id}")
+            logger.info(f"streaming ASR ready for task={task_id}")
         except Exception as e:
-            print(f"[record] streaming ASR load failed: {e}")
+            logger.error(f"streaming ASR load failed: {e}")
             streaming_ready = True
             audio_buffer.clear()
 
@@ -79,7 +83,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                                 "text": partial,
                             }, ensure_ascii=False))
                     except Exception as e:
-                        print(f"[record] streaming ASR error: {e}")
+                        logger.warning(f"streaming ASR error: {e}")
                 elif streaming_enabled and model_loading is not None:
                     audio_buffer.append(chunk)
             elif "text" in data:
@@ -96,7 +100,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                     await recorder_manager.set_sample_rate(task_id, sample_rate)
                     if streaming_enabled and sample_rate > 0:
                         model_loading = asyncio.create_task(_load_and_create_session())
-                        print(f"[record] streaming ASR loading in background for task={task_id}")
+                        logger.info(f"streaming ASR loading in background for task={task_id}")
     except WebSocketDisconnect:
         pass
     except Exception:
@@ -124,7 +128,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                     "final": True,
                 }, ensure_ascii=False))
         except Exception as e:
-            print(f"[record] streaming ASR finalize error: {e}")
+            logger.warning(f"streaming ASR finalize error: {e}")
 
     audio_path = await recorder_manager.stop_recording(task_id)
     if audio_path and os.path.exists(audio_path):

@@ -2,6 +2,10 @@ import sys
 import os
 import time
 import threading
+import logging
+from contextlib import asynccontextmanager
+
+logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -10,13 +14,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-from backend.app.config import PROJECT_ROOT, settings
+from backend.app.config import settings
 from backend.app.routers import upload, record, transcribe, generate, settings as settings_router, export, audio
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    loaded = _load_user_settings()
+    if loaded:
+        logger.info(f"Loaded {loaded} user setting(s) from DB")
+
+    removed = _cleanup_orphan_files()
+    if removed:
+        logger.info(f"cleaned {removed} orphan file(s) from {settings.temp_dir}")
+
+    _preload_models()
+    yield
+
 
 app = FastAPI(
     title="MeetingToText",
     description="会议录音转写与纪要生成系统",
     version="0.1.0",
+    lifespan=_lifespan,
 )
 
 app.add_middleware(
@@ -64,45 +84,6 @@ _USER_SETTING_KEYS = {
 _BOOL_KEYS = {"streaming_asr_enabled"}
 
 
-def _parse_env_file(path: str) -> dict[str, str]:
-    result: dict[str, str] = {}
-    if not os.path.exists(path):
-        return result
-    try:
-        with open(path, encoding="utf-8") as f:
-            for raw in f:
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                if "=" not in line:
-                    continue
-                k, v = line.split("=", 1)
-                k = k.strip()
-                v = v.strip().strip('"').strip("'")
-                if k:
-                    result[k] = v
-    except OSError:
-        pass
-    return result
-
-
-def _migrate_env_to_db() -> list[str]:
-    env_path = os.path.join(PROJECT_ROOT, ".env")
-    env_vars = _parse_env_file(env_path)
-    if not env_vars:
-        return []
-
-    from backend.app.services.store import get_store
-    store = get_store()
-    migrated: list[str] = []
-    for key in _USER_SETTING_KEYS:
-        mtt_key = f"MTT_{key.upper()}"
-        if mtt_key in env_vars and not store.get_setting(key):
-            store.set_setting(key, env_vars[mtt_key])
-            migrated.append(key)
-    return migrated
-
-
 def _load_user_settings() -> int:
     from backend.app.services.store import get_store
     from backend.app.services.llm import update_llm_config
@@ -145,25 +126,6 @@ def _cleanup_orphan_files(max_age_seconds: int = 24 * 3600) -> int:
     return removed
 
 
-@app.on_event("startup")
-def on_startup():
-    migrated = _migrate_env_to_db()
-    if migrated:
-        env_path = os.path.join(PROJECT_ROOT, ".env")
-        print(f"[startup] Migrated from .env -> DB: {migrated}")
-        print(f"[startup] You can now delete {env_path}")
-
-    loaded = _load_user_settings()
-    if loaded:
-        print(f"[startup] Loaded {loaded} user setting(s) from DB")
-
-    removed = _cleanup_orphan_files()
-    if removed:
-        print(f"[startup] cleaned {removed} orphan file(s) from {settings.temp_dir}")
-
-    _preload_models()
-
-
 def _preload_models() -> None:
     """Pre-load final ASR model + streaming ASR if enabled in settings."""
     def _load_streaming():
@@ -173,15 +135,15 @@ def _preload_models() -> None:
             from backend.app.services.asr_streaming import StreamingASR
             StreamingASR.get_instance(settings.streaming_asr_model_name).load()
         except Exception as e:
-            print(f"[startup] streaming ASR preload failed: {e}")
+            logger.error(f"streaming ASR preload failed: {e}")
 
     def _load_final():
         try:
             from backend.app.services.asr import get_asr
             get_asr(settings.asr_model_type, settings.asr_model_name)
-            print(f"[startup] final ASR model loaded: {settings.asr_model_name}")
+            logger.info(f"final ASR model loaded: {settings.asr_model_name}")
         except Exception as e:
-            print(f"[startup] final ASR preload failed: {e}")
+            logger.error(f"final ASR preload failed: {e}")
 
     threading.Thread(target=_load_streaming, daemon=True, name="preload-streaming").start()
     threading.Thread(target=_load_final, daemon=True, name="preload-final").start()
