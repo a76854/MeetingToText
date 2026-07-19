@@ -1,5 +1,53 @@
 from abc import ABC, abstractmethod
 from typing import Optional
+import re
+
+
+def _clean_text(text: str) -> str:
+    text = re.sub(r'<\|[^|>]+\|>', '', text)
+    text = text.strip()
+    text = re.sub(r'^[。，、；：！？,.!?:;]+', '', text)
+    text = text.strip()
+    return text
+
+
+def _parse_result(result: list) -> list[dict]:
+    segments = []
+    if not (isinstance(result, list) and result):
+        return segments
+
+    item = result[0]
+    for sent in item.get("sentence_info", []):
+        text = _clean_text(sent.get("text", ""))
+        if not text:
+            continue
+        segments.append({
+            "speaker": sent.get("spk", ""),
+            "text": text,
+            "start": float(sent.get("start", 0)) / 1000.0,
+            "end": float(sent.get("end", 0)) / 1000.0,
+        })
+
+    if not segments:
+        raw_text = item.get("text", "")
+        if isinstance(raw_text, str):
+            raw_text = _clean_text(raw_text)
+        timestamps = item.get("timestamp", [])
+        if raw_text and isinstance(timestamps, list) and timestamps:
+            texts = raw_text if isinstance(raw_text, list) else [raw_text]
+            for i, ts in enumerate(timestamps):
+                if isinstance(ts, list) and len(ts) == 2:
+                    txt = texts[i] if i < len(texts) else ""
+                    if not txt:
+                        continue
+                    segments.append({
+                        "speaker": "",
+                        "text": txt,
+                        "start": float(ts[0]) / 1000.0,
+                        "end": float(ts[1]) / 1000.0,
+                    })
+
+    return segments
 
 
 class BaseASR(ABC):
@@ -44,31 +92,7 @@ class SenseVoiceASR(BaseASR):
             merge_vad=True,
             merge_length_s=15,
         )
-        segments = []
-        if isinstance(result, list) and len(result) > 0:
-            item = result[0]
-            for sent in item.get("sentence_info", []):
-                segments.append({
-                    "speaker": sent.get("spk", ""),
-                    "text": sent.get("text", ""),
-                    "start": float(sent.get("start", 0)) / 1000.0,
-                    "end": float(sent.get("end", 0)) / 1000.0,
-                })
-        if not segments:
-            texts = item.get("text", "")
-            if isinstance(texts, str):
-                texts = [texts]
-            timestamps = item.get("timestamp", [])
-            if isinstance(timestamps, list) and timestamps:
-                for i, ts in enumerate(timestamps):
-                    if isinstance(ts, list) and len(ts) == 2:
-                        segments.append({
-                            "speaker": "",
-                            "text": texts[i] if i < len(texts) else "",
-                            "start": float(ts[0]) / 1000.0,
-                            "end": float(ts[1]) / 1000.0,
-                        })
-        return segments
+        return _parse_result(result)
 
     def unload(self):
         self.model = None
@@ -103,31 +127,7 @@ class ParaformerASR(BaseASR):
             merge_vad=True,
             merge_length_s=15,
         )
-        segments = []
-        if isinstance(result, list) and len(result) > 0:
-            item = result[0]
-            for sent in item.get("sentence_info", []):
-                segments.append({
-                    "speaker": sent.get("spk", ""),
-                    "text": sent.get("text", ""),
-                    "start": float(sent.get("start", 0)) / 1000.0,
-                    "end": float(sent.get("end", 0)) / 1000.0,
-                })
-        if not segments:
-            texts = item.get("text", "")
-            if isinstance(texts, str):
-                texts = [texts]
-            timestamps = item.get("timestamp", [])
-            if isinstance(timestamps, list) and timestamps:
-                for i, ts in enumerate(timestamps):
-                    if isinstance(ts, list) and len(ts) == 2:
-                        segments.append({
-                            "speaker": "",
-                            "text": texts[i] if i < len(texts) else "",
-                            "start": float(ts[0]) / 1000.0,
-                            "end": float(ts[1]) / 1000.0,
-                        })
-        return segments
+        return _parse_result(result)
 
     def unload(self):
         self.model = None

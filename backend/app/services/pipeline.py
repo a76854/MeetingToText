@@ -1,6 +1,7 @@
 import asyncio
 import os
 import time
+import numpy as np
 
 from backend.app.config import settings
 from backend.app.models.schemas import (
@@ -58,7 +59,23 @@ async def run_pipeline(task_id: str):
 
         import soundfile as sf
         audio_data, sr = sf.read(audio_path, dtype="float32")
+        if len(audio_data.shape) == 2:
+            audio_data = audio_data.mean(axis=1)
         duration = len(audio_data) / sr
+
+        mx = float(np.abs(audio_data).max())
+        rms = float(np.sqrt(np.mean(audio_data ** 2)))
+        clipped_ratio = float(np.mean(np.abs(audio_data) >= 0.99))
+
+        if duration < 0.5:
+            raise ValueError("录音时长不足 (约 0 秒)，请重新录制")
+        if mx < 0.005:
+            raise ValueError("音频信号极弱，可能麦克风未正确连接或静音")
+        if clipped_ratio > 0.1:
+            raise ValueError(
+                f"音频削波严重 (max={mx:.2f}, 削波样本比={clipped_ratio:.0%})。"
+                "请检查麦克风设置，降低系统输入音量或将麦克风远离音源后重试"
+            )
 
         update_step("vad", "running")
         await asyncio.sleep(0)

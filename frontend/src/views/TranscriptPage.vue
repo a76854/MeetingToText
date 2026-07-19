@@ -15,6 +15,7 @@ const fullText = ref('')
 const duration = ref(0)
 const progress = ref<any>(null)
 const error = ref('')
+const pipelineError = ref('')
 
 let es: EventSource | null = null
 
@@ -37,6 +38,7 @@ async function loadTask() {
     segments.value = data.segments
     fullText.value = data.full_text
     duration.value = data.duration
+    pipelineError.value = data.error || ''
   } catch (e: any) {
     error.value = e.message || '加载失败'
   }
@@ -54,6 +56,7 @@ function subscribeProgress() {
       segments.value = t.result?.segments || []
       fullText.value = t.result?.full_text || ''
       duration.value = t.result?.duration || 0
+      pipelineError.value = t.error || ''
       progress.value = null
     },
     (e) => {
@@ -108,7 +111,8 @@ function goToGenerate() {
       </div>
 
       <div v-if="!segments.length && !fullText" class="empty-hint">
-        转录完成，但未能解析到文本内容
+        <div v-if="pipelineError" class="empty-detail">{{ pipelineError }}</div>
+        <div v-else>转录完成，但未能识别到语音内容。请检查麦克风是否正常工作后重新录制。</div>
       </div>
     </div>
   </div>
@@ -184,6 +188,7 @@ h1 { font-size: 24px; }
 }
 
 .empty-hint { color: #888; text-align: center; padding: 32px; }
+.empty-detail { color: #d93025; margin-top: 12px; font-size: 13px; white-space: pre-wrap; }
 
 .status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; }

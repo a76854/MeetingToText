@@ -56,4 +56,5 @@ async def get_transcript(task_id: str):
         "full_text": task.result.full_text if task.result else "",
         "segments": [s.model_dump() for s in task.result.segments] if task.result else [],
         "duration": task.result.duration if task.result else 0.0,
+        "error": task.error or "",
     }

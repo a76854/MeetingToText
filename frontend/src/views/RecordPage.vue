@@ -13,14 +13,15 @@ const timer = ref('00:00')
 const volume = ref(0)
 const elapsedSec = ref(0)
 
-let mediaRecorder: MediaRecorder | null = null
 let ws: WebSocket | null = null
 let startTime = 0
 let timerInterval: number | null = null
-let analyser: AnalyserNode | null = null
 let audioCtx: AudioContext | null = null
+let analyser: AnalyserNode | null = null
+let scriptProcessor: ScriptProcessorNode | null = null
 let animFrame: number | null = null
 let wsTimeout: number | null = null
+let stream: MediaStream | null = null
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60)
@@ -28,29 +29,55 @@ function formatTime(s: number): string {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-function startVolumeMeter(stream: MediaStream) {
-  audioCtx = new AudioContext()
-  const source = audioCtx.createMediaStreamSource(stream)
+function setupAudioPipeline(s: MediaStream) {
+  audioCtx = new AudioContext({ sampleRate: 16000 })
+  const source = audioCtx.createMediaStreamSource(s)
+
   analyser = audioCtx.createAnalyser()
   analyser.fftSize = 256
   source.connect(analyser)
+
+  scriptProcessor = audioCtx.createScriptProcessor(4096, 1, 1)
+  source.connect(scriptProcessor)
+
+  const mute = audioCtx.createGain()
+  mute.gain.value = 0
+  scriptProcessor.connect(mute)
+  mute.connect(audioCtx.destination)
+
   const dataArray = new Uint8Array(analyser.frequencyBinCount)
   function tick() {
     if (!analyser) return
     analyser.getByteFrequencyData(dataArray)
     const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
-    volume.value = Math.min(avg / 128, 1)
+    volume.value = Math.min(avg / 160, 1)
     animFrame = requestAnimationFrame(tick)
   }
   tick()
+
+  scriptProcessor.onaudioprocess = (e) => {
+    if (ws?.readyState !== WebSocket.OPEN) return
+    const f32 = e.inputBuffer.getChannelData(0)
+    const i16 = new Int16Array(f32.length)
+    for (let i = 0; i < f32.length; i++) {
+      const s = Math.max(-1, Math.min(1, f32[i]))
+      i16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF
+    }
+    ws.send(i16.buffer)
+  }
 }
 
-function stopVolumeMeter() {
+function teardownAudioPipeline() {
   if (animFrame) cancelAnimationFrame(animFrame)
-  if (audioCtx) audioCtx.close()
-  analyser = null
-  audioCtx = null
   animFrame = null
+  if (scriptProcessor) {
+    scriptProcessor.disconnect()
+    scriptProcessor.onaudioprocess = null
+    scriptProcessor = null
+  }
+  if (analyser) { analyser.disconnect(); analyser = null }
+  if (audioCtx) { audioCtx.close(); audioCtx = null }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null }
   volume.value = 0
 }
 
@@ -60,31 +87,22 @@ function resetAll() {
   if (wsTimeout) clearTimeout(wsTimeout)
   wsTimeout = null
   if (ws) { ws.close(); ws = null }
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stream.getTracks().forEach(t => t.stop())
-  }
-  stopVolumeMeter()
+  teardownAudioPipeline()
 }
 
 async function startRecording() {
   error.value = ''
   state.value = 'opening_mic'
-  let stream: MediaStream
 
   try {
     stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    try {
-      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' })
-    } catch {
-      mediaRecorder = new MediaRecorder(stream)
-    }
   } catch (e: any) {
     state.value = 'idle'
     error.value = '无法访问麦克风: ' + (e.message || e)
     return
   }
 
-  startVolumeMeter(stream)
+  setupAudioPipeline(stream!)
   state.value = 'connecting'
 
   const baseUrl = window.location.protocol === 'https:' ? `wss://${window.location.host}` : `ws://${window.location.host}`
@@ -95,13 +113,13 @@ async function startRecording() {
   } catch {
     state.value = 'idle'
     error.value = '无法连接服务器，请确认后端已启动'
-    stream.getTracks().forEach(t => t.stop())
-    stopVolumeMeter()
+    teardownAudioPipeline()
     return
   }
 
   taskId.value = data.task_id
   ws = new WebSocket(`${baseUrl}/api/record/${data.task_id}`)
+  ws.binaryType = 'arraybuffer'
 
   wsTimeout = window.setTimeout(() => {
     if (state.value === 'connecting') {
@@ -139,14 +157,6 @@ async function startRecording() {
     }
   }
 
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
-      ws.send(e.data)
-    }
-  }
-
-  mediaRecorder.start(1000)
-
   ws.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data)
@@ -169,14 +179,9 @@ async function startRecording() {
 
 async function stopRecording() {
   state.value = 'stopping'
-
-  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
-    mediaRecorder.stop()
-    mediaRecorder.stream.getTracks().forEach(t => t.stop())
-  }
-  stopVolumeMeter()
   if (timerInterval) clearInterval(timerInterval)
   timerInterval = null
+  teardownAudioPipeline()
 
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     state.value = 'idle'
@@ -186,7 +191,6 @@ async function stopRecording() {
 
   ws.send(JSON.stringify({ action: 'stop' }))
 }
-
 
 onUnmounted(() => {
   resetAll()

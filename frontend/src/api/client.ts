@@ -36,6 +36,7 @@ export interface TranscriptData {
   full_text: string
   segments: any[]
   duration: number
+  error: string
 }
 
 export interface SettingsData {

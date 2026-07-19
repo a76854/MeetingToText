@@ -6,6 +6,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class Settings(BaseSettings):
+    model_config = {
+        "protected_namespaces": ("settings_",),
+        "env_prefix": "MTT_",
+        "env_file": os.path.join(PROJECT_ROOT, ".env"),
+        "env_file_encoding": "utf-8",
+    }
+
     data_dir: str = os.path.join(Path.home(), ".meetingtotext")
     upload_dir: str = os.path.join(Path.home(), ".meetingtotext", "uploads")
     model_cache_dir: str = os.path.join(Path.home(), ".meetingtotext", "models")
@@ -21,11 +28,6 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
 
     target_sr: int = 16000
-
-    class Config:
-        env_prefix = "MTT_"
-        env_file = os.path.join(PROJECT_ROOT, ".env")
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()
