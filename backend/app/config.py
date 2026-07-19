@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     streaming_asr_model_name: str = "paraformer-zh-streaming"
 
     browser_noise_suppression: bool = True
+    audio_source: str = "mic"
 
     @property
     def upload_dir(self) -> str:

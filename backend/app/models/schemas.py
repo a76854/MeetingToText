@@ -84,6 +84,7 @@ class SettingsUpdate(BaseModel):
     streaming_asr_enabled: bool | None = None
     streaming_asr_model_name: str | None = None
     browser_noise_suppression: bool | None = None
+    audio_source: str | None = None
 
 
 class SettingsInfo(BaseModel):
@@ -97,3 +98,4 @@ class SettingsInfo(BaseModel):
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
     browser_noise_suppression: bool = True
+    audio_source: str = "mic"

@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { api } from '../api/client'
+
+const activeTab = ref<'model' | 'record'>('model')
 
 const llmBaseUrl = ref('')
 const llmApiKey = ref('')
@@ -12,6 +14,8 @@ const asrModelName = ref('iic/SenseVoiceSmall')
 const streamingAsrEnabled = ref(false)
 const streamingAsrModelName = ref('paraformer-zh-streaming')
 const noiseSuppression = ref(true)
+const micEnabled = ref(true)
+const systemAudioEnabled = ref(false)
 const apiKeySet = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -28,10 +32,20 @@ onMounted(async () => {
     streamingAsrEnabled.value = s.streaming_asr_enabled
     streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
     noiseSuppression.value = s.browser_noise_suppression
+    const source = s.audio_source || 'mic'
+    micEnabled.value = source.includes('mic')
+    systemAudioEnabled.value = source.includes('system')
     apiKeySet.value = s.llm_api_key_set
   } catch (e: any) {
     error.value = e.message
   }
+})
+
+const audioSourceValue = computed(() => {
+  const parts: string[] = []
+  if (micEnabled.value) parts.push('mic')
+  if (systemAudioEnabled.value) parts.push('system')
+  return parts.join(',') || 'mic'
 })
 
 async function saveSettings() {
@@ -49,6 +63,7 @@ async function saveSettings() {
       streaming_asr_enabled: streamingAsrEnabled.value,
       streaming_asr_model_name: streamingAsrModelName.value,
       browser_noise_suppression: noiseSuppression.value,
+      audio_source: audioSourceValue.value,
     })
     saved.value = true
     apiKeySet.value = apiKeySet.value || !!llmApiKey.value
@@ -76,72 +91,96 @@ async function clearApiKey() {
   <div class="page">
     <h1>设置</h1>
 
-    <div class="section">
-      <h2>LLM 配置(openai api)</h2>
-      <label class="field">
-        <span>API 地址</span>
-        <input v-model="llmBaseUrl" placeholder="https://api.deepseek.com" class="input" />
-      </label>
-      <label class="field">
-        <span>
-          API Key
-          <span v-if="apiKeySet" class="badge">已设置</span>
-        </span>
-        <div class="key-row">
-          <input v-model="llmApiKey" type="password" :placeholder="apiKeySet ? '留空保留原 Key' : 'sk-...'" class="input" />
-          <button v-if="apiKeySet" class="btn-clear" @click="clearApiKey" title="清除已保存的 Key">清除</button>
+    <div class="tabs">
+      <button :class="['tab', { active: activeTab === 'model' }]" @click="activeTab = 'model'">模型设置</button>
+      <button :class="['tab', { active: activeTab === 'record' }]" @click="activeTab = 'record'">录制设置</button>
+    </div>
+
+    <Transition name="fade" mode="out-in">
+      <div v-if="activeTab === 'model'" key="model" class="tab-content">
+        <div class="section">
+          <h2>LLM 配置 (OpenAI API)</h2>
+          <label class="field">
+            <span>API 地址</span>
+            <input v-model="llmBaseUrl" placeholder="https://api.deepseek.com" class="input" />
+          </label>
+          <label class="field">
+            <span>
+              API Key
+              <span v-if="apiKeySet" class="badge">已设置</span>
+            </span>
+            <div class="key-row">
+              <input v-model="llmApiKey" type="password" :placeholder="apiKeySet ? '留空保留原 Key' : 'sk-...'" class="input" />
+              <button v-if="apiKeySet" class="btn-clear" @click="clearApiKey" title="清除已保存的 Key">清除</button>
+            </div>
+          </label>
+          <label class="field">
+            <span>模型</span>
+            <input v-model="llmModel" placeholder="deepseek-chat" class="input" />
+          </label>
+          <div class="row-2">
+            <label class="field">
+              <span>温度 ({{ llmTemperature }})</span>
+              <input v-model.number="llmTemperature" type="range" min="0" max="2" step="0.1" />
+            </label>
+            <label class="field">
+              <span>最大输出 tokens</span>
+              <input v-model.number="llmMaxTokens" type="number" min="256" max="32768" step="256" class="input" />
+            </label>
+          </div>
         </div>
-      </label>
-      <label class="field">
-        <span>模型</span>
-        <input v-model="llmModel" placeholder="deepseek-chat" class="input" />
-      </label>
-      <div class="row-2">
-        <label class="field">
-          <span>温度 ({{ llmTemperature }})</span>
-          <input v-model.number="llmTemperature" type="range" min="0" max="2" step="0.1" />
-        </label>
-        <label class="field">
-          <span>最大输出 tokens</span>
-          <input v-model.number="llmMaxTokens" type="number" min="256" max="32768" step="256" class="input" />
-        </label>
+
+        <div class="section">
+          <h2>语音识别配置</h2>
+          <label class="field">
+            <span>ASR 引擎（含内置说话人分离）</span>
+            <select v-model="asrModelType" class="input">
+              <option value="sensevoice">SenseVoice (轻量)</option>
+              <option value="paraformer">Paraformer (更高精度)</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>ASR 模型名 (ModelScope)</span>
+            <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
+          </label>
+        </div>
+
+        <div class="section">
+          <h2>实时转录</h2>
+          <label class="field checkbox-field">
+            <input v-model="streamingAsrEnabled" type="checkbox" />
+            <span>启用服务端实时转录</span>
+          </label>
+          <label v-if="streamingAsrEnabled" class="field">
+            <span>流式 ASR 模型名</span>
+            <input v-model="streamingAsrModelName" placeholder="paraformer-zh-streaming" class="input" />
+          </label>
+        </div>
       </div>
-    </div>
 
-    <div class="section">
-      <h2>语音识别配置</h2>
-      <label class="field">
-        <span>ASR 引擎（含内置说话人分离）</span>
-        <select v-model="asrModelType" class="input">
-          <option value="sensevoice">SenseVoice (轻量)</option>
-          <option value="paraformer">Paraformer (更高精度)</option>
-        </select>
-      </label>
-      <label class="field">
-        <span>ASR 模型名 (ModelScope)</span>
-        <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
-      </label>
-    </div>
+      <div v-else key="record" class="tab-content">
+        <div class="section">
+          <h2>音频源</h2>
+          <label class="field checkbox-field">
+            <input v-model="micEnabled" type="checkbox" />
+            <span>麦克风</span>
+          </label>
+          <label class="field checkbox-field">
+            <input v-model="systemAudioEnabled" type="checkbox" />
+            <span>系统音频</span>
+          </label>
+          <p v-if="systemAudioEnabled" class="hint-text">点击开始录音后浏览器会弹出共享对话框，请选择「整个屏幕」并勾选「共享系统音频」</p>
+        </div>
 
-    <div class="section">
-      <h2>实时转录</h2>
-      <label class="field checkbox-field">
-        <input v-model="streamingAsrEnabled" type="checkbox" />
-        <span>启用服务端实时转录</span>
-      </label>
-      <label v-if="streamingAsrEnabled" class="field">
-        <span>流式 ASR 模型名</span>
-        <input v-model="streamingAsrModelName" placeholder="paraformer-zh-streaming" class="input" />
-      </label>
-    </div>
-
-    <div class="section">
-      <h2>录制</h2>
-      <label class="field checkbox-field">
-        <input v-model="noiseSuppression" type="checkbox" />
-        <span>浏览器降噪（回声消除、降噪、自动增益）</span>
-      </label>
-    </div>
+        <div class="section">
+          <h2>音频处理</h2>
+          <label class="field checkbox-field">
+            <input v-model="noiseSuppression" type="checkbox" />
+            <span>浏览器降噪（回声消除、降噪、自动增益）</span>
+          </label>
+        </div>
+      </div>
+    </Transition>
 
     <button class="btn-save" @click="saveSettings">保存设置</button>
 
@@ -154,9 +193,39 @@ async function clearApiKey() {
 
 <style scoped>
 .page { max-width: 600px; margin: 0 auto; }
-h1 { font-size: 24px; margin-bottom: 8px; }
-.hint { font-size: 12px; color: #888; margin-bottom: 20px; }
-.hint code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
+h1 { font-size: 24px; margin-bottom: 16px; }
+
+.tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #e0e0e0;
+}
+.tab {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #888;
+  position: relative;
+  font-family: inherit;
+}
+.tab.active {
+  color: #1a73e8;
+  font-weight: 500;
+}
+.tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #1a73e8;
+}
+
+.tab-content { min-height: 0; }
 
 .section {
   background: white;
@@ -181,10 +250,10 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
   margin-top: 1px;
   cursor: pointer;
 }
-.checkbox-field span {
-  flex: 1;
-  line-height: 1.5;
-}
+.checkbox-field span { flex: 1; line-height: 1.5; }
+
+.hint-text { font-size: 12px; color: #e65c00; margin-top: -8px; margin-bottom: 8px; line-height: 1.5; }
+
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 640px) {
   .row-2 { grid-template-columns: 1fr; }
@@ -233,7 +302,6 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 }
 .btn-save:hover { background: #1557b0; }
 
-.success-box { padding: 12px; background: #e6f4ea; border-radius: 8px; color: #137333; margin-top: 12px; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-top: 12px; }
 
 .toast {
@@ -250,18 +318,16 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
   z-index: 1000;
   pointer-events: none;
 }
-.toast-enter-active, .toast-leave-active {
-  transition: opacity 0.2s, transform 0.2s;
-}
-.toast-enter-from, .toast-leave-to {
-  opacity: 0;
-  transform: translateX(-50%) translateY(-8px);
-}
+.toast-enter-active, .toast-leave-active { transition: opacity 0.2s, transform 0.2s; }
+.toast-enter-from, .toast-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+
+.fade-enter-active, .fade-leave-active { transition: opacity 0.15s; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
 
 @media (max-width: 640px) {
   .page { max-width: 100%; }
   h1 { font-size: 20px; }
   .section { padding: 16px; }
-  .input { font-size: 16px; }  /* 防止 iOS 自动放大 */
+  .input { font-size: 16px; }
 }
 </style>

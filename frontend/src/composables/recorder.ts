@@ -11,6 +11,7 @@ export const volume = ref(0)
 export const elapsedSec = ref(0)
 export const streamingAsrEnabled = ref(false)
 export const noiseSuppression = ref(true)
+export const audioSource = ref('mic')
 export const liveText = ref('')
 export const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error'>('idle')
 export const liveError = ref('')
@@ -225,6 +226,47 @@ export async function startRecording(router: any) {
 
   let mediaStream: MediaStream
   try {
+    const hasMic = audioSource.value.includes('mic')
+    const hasSystem = audioSource.value.includes('system')
+
+    if (hasMic && hasSystem) {
+      const micStream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: noiseSuppression.value,
+          noiseSuppression: noiseSuppression.value,
+          autoGainControl: noiseSuppression.value,
+        }
+      })
+      const ds = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          ...({ suppressLocalAudioPlayback: false } as any),
+        } as any,
+      })
+      const sysStream = new MediaStream(ds.getAudioTracks())
+      ds.getVideoTracks().forEach(t => t.stop())
+
+      const mergeCtx = new AudioContext()
+      const dest = mergeCtx.createMediaStreamDestination()
+      mergeCtx.createMediaStreamSource(micStream).connect(dest)
+      mergeCtx.createMediaStreamSource(sysStream).connect(dest)
+      mediaStream = dest.stream
+    } else if (hasSystem) {
+      const ds = await navigator.mediaDevices.getDisplayMedia({
+        video: true,
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+          ...({ suppressLocalAudioPlayback: false } as any),
+        } as any,
+      })
+      mediaStream = new MediaStream(ds.getAudioTracks())
+      ds.getVideoTracks().forEach(t => t.stop())
+    } else {
       mediaStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: noiseSuppression.value,
@@ -232,6 +274,7 @@ export async function startRecording(router: any) {
           autoGainControl: noiseSuppression.value,
         }
       })
+    }
   } catch (e: any) {
     if (ws && ws.readyState === WebSocket.OPEN) {
       try { ws.send(JSON.stringify({ action: 'discard' })) } catch {}
@@ -239,7 +282,8 @@ export async function startRecording(router: any) {
     closeWs()
     clearTimeouts()
     state.value = 'idle'
-    error.value = '无法访问麦克风: ' + (e.message || e)
+    const label = audioSource.value.includes('system') ? '无法捕获系统音频: ' : '无法访问麦克风: '
+    error.value = label + (e.message || e)
     return
   }
 
@@ -337,9 +381,11 @@ export async function loadSettings() {
     const s = await api.getSettings()
     streamingAsrEnabled.value = s.streaming_asr_enabled
     noiseSuppression.value = s.browser_noise_suppression
+    audioSource.value = s.audio_source || 'mic'
   } catch {
     streamingAsrEnabled.value = false
     noiseSuppression.value = true
+    audioSource.value = 'mic'
   }
 }
 

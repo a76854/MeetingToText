@@ -79,6 +79,7 @@ _USER_SETTING_KEYS = {
     "asr_model_type": str,
     "asr_model_name": str,
     "streaming_asr_model_name": str,
+    "audio_source": str,
 }
 
 _BOOL_KEYS = {"streaming_asr_enabled", "browser_noise_suppression"}
