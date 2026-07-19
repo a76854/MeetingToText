@@ -83,6 +83,15 @@ class TaskStore:
                                  (status.value, task_id))
                 conn.commit()
 
+    def reset_for_retry(self, task_id: str):
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute(
+                    "UPDATE tasks SET status = ?, duration = ?, segments = ?, full_text = ?, minutes = ?, error = ?, progress = ? WHERE id = ?",
+                    (TaskStatus.pending.value, 0.0, "[]", "", "", "", "{}", task_id),
+                )
+                conn.commit()
+
     def save_progress(self, task_id: str, progress: ProgressInfo):
         progress_json = json.dumps(progress.model_dump(), ensure_ascii=False)
         with self._lock:

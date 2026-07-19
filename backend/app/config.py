@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
 
+    streaming_asr_enabled: bool = False
+    streaming_asr_model_name: str = "paraformer-zh-streaming"
+
     @property
     def upload_dir(self) -> str:
         return os.path.join(self.data_dir, "uploads")

@@ -9,6 +9,8 @@ const llmTemperature = ref(0.3)
 const llmMaxTokens = ref(4096)
 const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
+const streamingAsrEnabled = ref(false)
+const streamingAsrModelName = ref('paraformer-zh-streaming')
 const apiKeySet = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -22,6 +24,8 @@ onMounted(async () => {
     llmMaxTokens.value = s.llm_max_tokens
     asrModelType.value = s.asr_model_type
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
+    streamingAsrEnabled.value = s.streaming_asr_enabled
+    streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
     apiKeySet.value = s.llm_api_key_set
   } catch (e: any) {
     error.value = e.message
@@ -40,6 +44,8 @@ async function saveSettings() {
       llm_max_tokens: llmMaxTokens.value,
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
+      streaming_asr_enabled: streamingAsrEnabled.value,
+      streaming_asr_model_name: streamingAsrModelName.value,
     })
     saved.value = true
     apiKeySet.value = apiKeySet.value || !!llmApiKey.value
@@ -68,7 +74,7 @@ async function clearApiKey() {
     <h1>设置</h1>
 
     <div class="section">
-      <h2>LLM 配置</h2>
+      <h2>LLM 配置(openai api)</h2>
       <label class="field">
         <span>API 地址</span>
         <input v-model="llmBaseUrl" placeholder="https://api.deepseek.com" class="input" />
@@ -104,13 +110,25 @@ async function clearApiKey() {
       <label class="field">
         <span>ASR 引擎（含内置说话人分离）</span>
         <select v-model="asrModelType" class="input">
-          <option value="sensevoice">SenseVoice (推荐，轻量)</option>
+          <option value="sensevoice">SenseVoice (轻量)</option>
           <option value="paraformer">Paraformer (更高精度)</option>
         </select>
       </label>
       <label class="field">
         <span>ASR 模型名 (ModelScope)</span>
         <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
+      </label>
+    </div>
+
+    <div class="section">
+      <h2>实时转录</h2>
+      <label class="field checkbox-field">
+        <input v-model="streamingAsrEnabled" type="checkbox" />
+        <span>启用服务端实时转录</span>
+      </label>
+      <label v-if="streamingAsrEnabled" class="field">
+        <span>流式 ASR 模型名</span>
+        <input v-model="streamingAsrModelName" placeholder="paraformer-zh-streaming" class="input" />
       </label>
     </div>
 
@@ -138,6 +156,22 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .field span { font-size: 13px; color: #666; }
+.checkbox-field {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+.checkbox-field input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  cursor: pointer;
+}
+.checkbox-field span {
+  flex: 1;
+  line-height: 1.5;
+}
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 @media (max-width: 640px) {
   .row-2 { grid-template-columns: 1fr; }

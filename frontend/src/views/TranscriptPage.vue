@@ -292,9 +292,7 @@ function exportAs(format: string) {
           <span class="footer-label">导出：</span>
           <button class="btn-export" @click="exportAs('txt')">TXT</button>
           <button class="btn-export" @click="exportAs('srt')">SRT 字幕</button>
-          <button class="btn-export" @click="exportAs('vtt')">VTT 字幕</button>
           <button class="btn-export" @click="exportAs('md')">Markdown</button>
-          <button class="btn-export" @click="exportAs('all')">全部 (zip)</button>
         </div>
         <button class="btn-delete" @click="deleteTask">删除任务</button>
       </div>

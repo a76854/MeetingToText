@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -21,8 +22,24 @@ async def start_transcribe(task_id: str):
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    if task.status == TaskStatus.processing:
+        raise HTTPException(status_code=400, detail="任务正在转录中")
     asyncio.create_task(run_pipeline(task_id))
     return {"status": "started", "task_id": task_id}
+
+
+@router.post("/transcribe/{task_id}/retry")
+async def retry_transcribe(task_id: str):
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if not task.audio_path or not os.path.exists(task.audio_path):
+        raise HTTPException(status_code=400, detail="音频文件不存在，无法重新转录")
+    if task.status == TaskStatus.processing:
+        raise HTTPException(status_code=400, detail="任务正在转录中")
+    get_store().reset_for_retry(task_id)
+    asyncio.create_task(run_pipeline(task_id))
+    return {"status": "restarted", "task_id": task_id}
 
 
 @router.get("/transcribe/{task_id}/stream")

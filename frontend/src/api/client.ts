@@ -47,6 +47,8 @@ export interface SettingsData {
   llm_max_tokens: number
   asr_model_type: string
   asr_model_name: string
+  streaming_asr_enabled: boolean
+  streaming_asr_model_name: string
 }
 
 export interface TaskListItem {
@@ -76,6 +78,9 @@ export const api = {
 
   startTranscribe: (id: string): Promise<{ status: string; task_id: string }> =>
     request(`/transcribe/${id}`, { method: 'POST' }),
+
+  retryTranscribe: (id: string): Promise<{ status: string; task_id: string }> =>
+    request(`/transcribe/${id}/retry`, { method: 'POST' }),
 
   getTranscript: (id: string): Promise<TranscriptData> => request(`/transcript/${id}`),
 
@@ -111,4 +116,6 @@ export const api = {
     request(`/settings/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
   exportUrl: (id: string, format: string) => `${BASE}/export/${id}?format=${encodeURIComponent(format)}`,
+
+  audioUrl: (id: string) => `${BASE}/audio/${id}`,
 }

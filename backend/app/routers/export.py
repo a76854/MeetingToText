@@ -1,6 +1,5 @@
 import io
 import json
-import zipfile
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -19,16 +18,6 @@ def _format_timestamp_srt(seconds: float) -> str:
     m, ms = divmod(ms, 60_000)
     s, ms = divmod(ms, 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
-
-
-def _format_timestamp_vtt(seconds: float) -> str:
-    if seconds < 0:
-        seconds = 0
-    ms = int(round(seconds * 1000))
-    h, ms = divmod(ms, 3600_000)
-    m, ms = divmod(ms, 60_000)
-    s, ms = divmod(ms, 1000)
-    return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
 
 
 def _export_txt(task) -> str:
@@ -80,26 +69,10 @@ def _export_srt(task) -> str:
     return "\n".join(blocks)
 
 
-def _export_vtt(task) -> str:
-    if not task.result:
-        return "WEBVTT\n\n"
-    blocks = ["WEBVTT", ""]
-    for i, seg in enumerate(task.result.segments, 1):
-        blocks.append(str(i))
-        blocks.append(f"{_format_timestamp_vtt(seg.start)} --> {_format_timestamp_vtt(seg.end)}")
-        if seg.speaker:
-            blocks.append(f"<v {seg.speaker}>{seg.text}</v>")
-        else:
-            blocks.append(seg.text)
-        blocks.append("")
-    return "\n".join(blocks)
-
-
 _EXPORTERS = {
     "txt": ("text/plain; charset=utf-8", _export_txt, "{stem}.txt"),
     "md": ("text/markdown; charset=utf-8", _export_md, "{stem}.md"),
     "srt": ("application/x-subrip; charset=utf-8", _export_srt, "{stem}.srt"),
-    "vtt": ("text/vtt; charset=utf-8", _export_vtt, "{stem}.vtt"),
 }
 
 
@@ -112,20 +85,6 @@ async def export_transcript(task_id: str, format: str = "txt"):
         raise HTTPException(status_code=400, detail="转录未完成，无法导出")
 
     fmt = format.lower()
-    if fmt == "all":
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-            for ext, (mime, exporter, name_tpl) in _EXPORTERS.items():
-                content = exporter(task)
-                filename = name_tpl.format(stem=task.filename.rsplit(".", 1)[0])
-                zf.writestr(filename, content)
-        buf.seek(0)
-        return StreamingResponse(
-            buf,
-            media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{task.filename.rsplit(".",1)[0]}.zip"'},
-        )
-
     if fmt not in _EXPORTERS:
         raise HTTPException(status_code=400, detail=f"不支持的格式: {format}")
 

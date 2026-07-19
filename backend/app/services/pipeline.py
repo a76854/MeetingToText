@@ -1,7 +1,10 @@
 import asyncio
 import os
 import time
+import tempfile
 import numpy as np
+import soundfile as sf
+import librosa
 
 from backend.app.config import settings
 from backend.app.models.schemas import (
@@ -39,6 +42,32 @@ def create_task(filename: str, audio_path: str) -> TaskInfo:
     return get_store().create(task)
 
 
+def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
+    """Load audio, resample to 16kHz if needed, write temp file for ASR.
+
+    Returns (asr_input_path, original_sr, duration_seconds).
+    """
+    try:
+        audio_data, original_sr = sf.read(audio_path, dtype="float32")
+    except Exception as e:
+        raise ValueError(f"无法读取音频文件: {e}")
+
+    if len(audio_data.shape) == 2:
+        audio_data = audio_data.mean(axis=1)
+
+    duration = len(audio_data) / original_sr
+
+    if original_sr == 16000:
+        return audio_path, original_sr, duration
+
+    print(f"[pipeline] Resampling {original_sr}Hz -> 16000Hz ({duration:.1f}s)")
+    resampled = librosa.resample(audio_data, orig_sr=original_sr, target_sr=16000)
+    fd, tmp_path = tempfile.mkstemp(prefix="asr_16k_", suffix=".wav", dir=settings.temp_dir)
+    os.close(fd)
+    sf.write(tmp_path, resampled, 16000, subtype="PCM_16")
+    return tmp_path, original_sr, duration
+
+
 async def run_pipeline(task_id: str):
     store = get_store()
     task = store.get(task_id)
@@ -65,20 +94,31 @@ async def run_pipeline(task_id: str):
             progress.overall = overall
         store.save_progress(task_id, progress)
 
+    asr_temp_path: str | None = None
+    original_audio_path: str | None = None
     try:
         audio_path = task.audio_path
         if not os.path.exists(audio_path):
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
-        import soundfile as sf
-        audio_data, sr = sf.read(audio_path, dtype="float32")
-        if len(audio_data.shape) == 2:
-            audio_data = audio_data.mean(axis=1)
-        duration = len(audio_data) / sr
+        original_audio_path = audio_path
+        asr_input, original_sr, duration = _prepare_asr_input(audio_path)
+        if asr_input != audio_path:
+            asr_temp_path = asr_input
 
-        mx = float(np.abs(audio_data).max())
-        rms = float(np.sqrt(np.mean(audio_data ** 2)))
-        clipped_ratio = float(np.mean(np.abs(audio_data) >= 0.99))
+        # Quick stats on the (resampled) audio we're about to ASR
+        check_data, check_sr = sf.read(asr_input, dtype="float32")
+        if len(check_data.shape) == 2:
+            check_data = check_data.mean(axis=1)
+        mx = float(np.abs(check_data).max())
+        rms = float(np.sqrt(np.mean(check_data ** 2)))
+        clipped_ratio = float(np.mean(np.abs(check_data) >= 0.99))
+
+        print(
+            f"[pipeline] task={task_id} file={audio_path} "
+            f"orig_sr={original_sr}Hz asr_sr={check_sr}Hz "
+            f"dur={duration:.1f}s mx={mx:.4f} rms={rms:.4f}"
+        )
 
         if duration < 0.5:
             raise ValueError("录音时长不足 (约 0 秒)，请重新录制")
@@ -94,7 +134,19 @@ async def run_pipeline(task_id: str):
         update_step("asr", "running", "加载模型并识别...", overall=0.2)
 
         asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
-        segments_raw = asr_engine.transcribe(audio_path, language="auto")
+        segments_raw = asr_engine.transcribe(asr_input, language="auto")
+        print(f"[pipeline] ASR returned {len(segments_raw)} segments for task={task_id}")
+
+        # Fallback: if resampled input yielded 0 segments, retry with the original file
+        if not segments_raw and asr_temp_path is not None:
+            print("[pipeline] Resampled input empty, retrying with original audio")
+            segments_raw = asr_engine.transcribe(original_audio_path, language="auto")
+            print(f"[pipeline] Original-audio ASR returned {len(segments_raw)} segments")
+
+        if not segments_raw:
+            print(f"[pipeline] WARNING: ASR produced 0 segments for task={task_id}; "
+                  f"audio may be too quiet, in unsupported language, or the model failed to load")
+
         update_step("vad", "done", overall=0.5)
         update_step("asr", "done", f"识别完成，共 {len(segments_raw)} 段", overall=1.0)
 
@@ -122,4 +174,11 @@ async def run_pipeline(task_id: str):
         store.save_result(task_id, result)
 
     except Exception as e:
+        print(f"[pipeline] task={task_id} failed: {e}")
         store.update_progress(task_id, TaskStatus.error, str(e))
+    finally:
+        if asr_temp_path and os.path.exists(asr_temp_path):
+            try:
+                os.remove(asr_temp_path)
+            except OSError:
+                pass

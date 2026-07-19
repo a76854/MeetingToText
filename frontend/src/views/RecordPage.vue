@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
+import { api } from '../api/client'
 
 const router = useRouter()
 
@@ -12,11 +13,10 @@ const error = ref('')
 const timer = ref('00:00')
 const volume = ref(0)
 const elapsedSec = ref(0)
-const liveFinal = ref('')
-const liveInterim = ref('')
-const speechSupported = ref(false)
-const speechStatus = ref<'idle' | 'running' | 'error'>('idle')
-const speechErrorMsg = ref('')
+const streamingAsrEnabled = ref(false)
+const liveText = ref('')
+const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error'>('idle')
+const liveError = ref('')
 
 const liveContentEl = ref<HTMLElement | null>(null)
 
@@ -31,12 +31,15 @@ let wsTimeout: number | null = null
 let stream: MediaStream | null = null
 let pendingStream: MediaStream | null = null
 let cancelled = false
-let recognition: any = null
 
-const SpeechRecognitionCtor: any = (typeof window !== 'undefined')
-  ? ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
-  : null
-speechSupported.value = !!SpeechRecognitionCtor
+onMounted(async () => {
+  try {
+    const s = await api.getSettings()
+    streamingAsrEnabled.value = s.streaming_asr_enabled
+  } catch {
+    streamingAsrEnabled.value = false
+  }
+})
 
 function formatTime(s: number): string {
   const m = Math.floor(s / 60)
@@ -52,6 +55,15 @@ function genTaskId(): string {
     for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256)
   }
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
+}
+
+async function toggleStreamingAsr(v: boolean) {
+  streamingAsrEnabled.value = v
+  try {
+    await api.updateSettings({ streaming_asr_enabled: v })
+  } catch {
+    streamingAsrEnabled.value = !v
+  }
 }
 
 function setupAudioPipeline(s: MediaStream) {
@@ -120,14 +132,12 @@ function closeWs() {
 
 function resetAll() {
   clearTimers()
-  stopSpeech()
   closeWs()
   teardownAudioPipeline()
   cancelled = false
-  liveFinal.value = ''
-  liveInterim.value = ''
-  speechStatus.value = 'idle'
-  speechErrorMsg.value = ''
+  liveText.value = ''
+  liveStatus.value = 'idle'
+  liveError.value = ''
 }
 
 function startTimer() {
@@ -139,72 +149,6 @@ function startTimer() {
   }, 200)
 }
 
-function startSpeech() {
-  if (!speechSupported.value || recognition) return
-  try {
-    recognition = new SpeechRecognitionCtor()
-    recognition.continuous = true
-    recognition.interimResults = true
-    recognition.lang = 'zh-CN'
-
-    recognition.onstart = () => {
-      speechStatus.value = 'running'
-      speechErrorMsg.value = ''
-    }
-
-    recognition.onresult = (event: any) => {
-      let interim = ''
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i]
-        const text = (result[0]?.transcript || '').trim()
-        if (!text) continue
-        if (result.isFinal) {
-          liveFinal.value = (liveFinal.value ? liveFinal.value + '\n' : '') + text
-        } else {
-          interim += text
-        }
-      }
-      liveInterim.value = interim
-      scrollLiveToBottom()
-    }
-
-    recognition.onerror = (event: any) => {
-      const code = event?.error || 'unknown'
-      if (code === 'no-speech' || code === 'aborted') return
-      speechStatus.value = 'error'
-      if (code === 'not-allowed' || code === 'service-not-allowed') {
-        speechErrorMsg.value = '麦克风权限被拒绝，无法实时转录'
-      } else if (code === 'network') {
-        speechErrorMsg.value = '网络错误，实时转录不可用'
-      } else {
-        speechErrorMsg.value = `实时转录不可用 (${code})`
-      }
-    }
-
-    recognition.onend = () => {
-      // Auto-restart if still recording
-      if (state.value === 'recording' && !cancelled && recognition) {
-        try { recognition.start() } catch {}
-      }
-    }
-
-    recognition.start()
-  } catch (e: any) {
-    speechStatus.value = 'error'
-    speechErrorMsg.value = e?.message || '无法启动实时转录'
-    recognition = null
-  }
-}
-
-function stopSpeech() {
-  if (!recognition) return
-  try {
-    recognition.onend = null
-    recognition.stop()
-  } catch {}
-  recognition = null
-}
-
 function scrollLiveToBottom() {
   nextTick(() => {
     if (liveContentEl.value) {
@@ -213,14 +157,25 @@ function scrollLiveToBottom() {
   })
 }
 
+function appendLiveText(text: string) {
+  if (!text) return
+  liveText.value = (liveText.value ? liveText.value + ' ' : '') + text.trim()
+  scrollLiveToBottom()
+}
+
 function attachLifetimeHandlers() {
   if (!ws) return
   ws.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data)
-      if (msg.status === 'done') {
+      if (msg.type === 'partial') {
+        liveStatus.value = 'active'
+        appendLiveText(msg.text)
+        if (msg.final) {
+          liveStatus.value = 'idle'
+        }
+      } else if (msg.status === 'done') {
         clearTimers()
-        stopSpeech()
         teardownAudioPipeline()
         state.value = 'done'
         if (msg.task_id) {
@@ -254,8 +209,9 @@ async function startRecording() {
   error.value = ''
   state.value = 'preparing'
   cancelled = false
-  liveFinal.value = ''
-  liveInterim.value = ''
+  liveText.value = ''
+  liveStatus.value = streamingAsrEnabled.value ? 'waiting' : 'idle'
+  liveError.value = ''
 
   const newTaskId = genTaskId()
   taskId.value = newTaskId
@@ -341,7 +297,6 @@ async function startRecording() {
   }
 
   attachLifetimeHandlers()
-  startSpeech()
 
   state.value = 'recording'
   startTimer()
@@ -357,7 +312,6 @@ async function stopRecording() {
   state.value = 'stopping'
   if (timerInterval) clearInterval(timerInterval)
   timerInterval = null
-  stopSpeech()
   teardownAudioPipeline()
   try {
     ws.send(JSON.stringify({ action: 'stop' }))
@@ -376,7 +330,6 @@ function cancelRecording() {
   timerInterval = null
   if (wsTimeout) { clearTimeout(wsTimeout); wsTimeout = null }
   teardownAudioPipeline()
-  stopSpeech()
   if (ws) {
     if (ws.readyState === WebSocket.OPEN) {
       try { ws.send(JSON.stringify({ action: 'discard' })) } catch {}
@@ -406,6 +359,10 @@ onUnmounted(() => {
         <div class="mic-icon">🎤</div>
         <div>点击下方按钮开始录音</div>
         <div class="idle-sub">录制完成后将自动生成转录和会议纪要</div>
+        <label class="streaming-toggle">
+          <input type="checkbox" :checked="streamingAsrEnabled" @change="toggleStreamingAsr(($event.target as HTMLInputElement).checked)" />
+          <span>实时转录</span>
+        </label>
       </div>
 
       <div v-if="state === 'preparing'" class="connecting-hint">
@@ -432,23 +389,17 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="(state === 'recording' || state === 'stopping') && (speechSupported || speechErrorMsg)" class="live-panel">
+      <div v-if="(state === 'recording' || state === 'stopping') && streamingAsrEnabled" class="live-panel">
         <div class="live-header">
-          <span class="live-dot" :class="speechStatus"></span>
+          <span class="live-dot" :class="liveStatus"></span>
           <span class="live-title">实时转录</span>
-          <span v-if="!speechSupported" class="live-warn">浏览器不支持</span>
+          <span v-if="liveStatus === 'waiting'" class="live-warn">加载模型中...</span>
         </div>
         <div class="live-content" ref="liveContentEl">
-          <p
-            v-for="(line, i) in liveFinal.split('\n').filter(l => l.trim())"
-            :key="'f' + i"
-            class="live-line final"
-          >{{ line }}</p>
-          <p v-if="liveInterim" class="live-line interim">
-            {{ liveInterim }}<span class="cursor">▍</span>
-          </p>
-          <p v-if="speechErrorMsg" class="live-empty error">{{ speechErrorMsg }}</p>
-          <p v-else-if="!liveFinal && !liveInterim" class="live-empty">聆听中...</p>
+          <p v-if="liveText" class="live-text">{{ liveText }}<span class="cursor">▍</span></p>
+          <p v-else-if="liveStatus === 'waiting'" class="live-empty">正在启动实时转录，请稍候...</p>
+          <p v-else class="live-empty">聆听中...</p>
+          <p v-if="liveError" class="live-empty error">{{ liveError }}</p>
         </div>
       </div>
 
@@ -514,7 +465,6 @@ onUnmounted(() => {
 
       <p v-if="state === 'idle'" class="cancel-tip">
         录音中可随时点「取消」放弃本次录制，不会保存到历史任务。
-        <span v-if="!speechSupported" class="tip-warn">（您的浏览器不支持实时字幕，录音结束后由服务器转录）</span>
       </p>
     </div>
   </div>
@@ -541,6 +491,17 @@ h1 { font-size: 24px; margin-bottom: 8px; }
 .idle-hint { color: #666; font-size: 15px; }
 .mic-icon { font-size: 40px; margin-bottom: 12px; }
 .idle-sub { font-size: 12px; color: #aaa; margin-top: 8px; }
+
+.streaming-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: #444;
+  cursor: pointer;
+}
+.streaming-toggle input { cursor: pointer; }
 
 .connecting-hint {
   display: flex;
@@ -645,7 +606,7 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   font-weight: 500;
 }
 .live-title { color: #444; }
-.live-warn { color: #d93025; font-size: 11px; margin-left: auto; }
+.live-warn { color: #1a73e8; font-size: 11px; margin-left: auto; }
 .live-dot {
   width: 8px;
   height: 8px;
@@ -654,7 +615,8 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   animation: pulse 1.5s infinite;
   flex-shrink: 0;
 }
-.live-dot.error { background: #d93025; animation: none; opacity: 0.5; }
+.live-dot.waiting { background: #f9ab00; animation: none; }
+.live-dot.active { background: #d93025; animation: pulse 1.5s infinite; }
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(0.85); }
@@ -667,9 +629,7 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   color: #222;
   -webkit-overflow-scrolling: touch;
 }
-.live-line { margin: 0 0 4px 0; word-break: break-word; }
-.live-line.interim { color: #999; }
-.live-line.final { color: #222; }
+.live-text { margin: 0; word-break: break-word; }
 .live-empty { color: #999; font-style: italic; margin: 0; }
 .live-empty.error { color: #d93025; font-style: normal; }
 .cursor {
@@ -761,7 +721,6 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   max-width: 360px;
   line-height: 1.5;
 }
-.tip-warn { color: #d93025; }
 
 .error-box {
   padding: 10px 14px;
@@ -780,7 +739,7 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   .record-area { padding: 24px 16px; min-height: 280px; gap: 16px; }
   .timer-main { font-size: 44px; letter-spacing: 2px; }
   .volume-bars { height: 36px; }
-  .vol-bar:nth-child(n+25) { display: none; }  /* 24 bars on mobile */
+  .vol-bar:nth-child(n+25) { display: none; }
   .button-row.wrap { flex-direction: column; }
   .btn-record, .btn-cancel { width: 100%; min-width: 0; }
   .live-panel { max-width: 100%; padding: 10px 12px; }

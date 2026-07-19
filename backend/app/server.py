@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 import uvicorn
 
 from backend.app.config import PROJECT_ROOT, settings
-from backend.app.routers import upload, record, transcribe, generate, settings as settings_router, export
+from backend.app.routers import upload, record, transcribe, generate, settings as settings_router, export, audio
 
 app = FastAPI(
     title="MeetingToText",
@@ -32,6 +32,7 @@ app.include_router(transcribe.router)
 app.include_router(generate.router)
 app.include_router(settings_router.router)
 app.include_router(export.router)
+app.include_router(audio.router)
 
 
 @app.get("/api/health")
