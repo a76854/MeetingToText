@@ -1,6 +1,7 @@
 import sys
 import os
 import time
+import threading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -57,7 +58,10 @@ _USER_SETTING_KEYS = {
     "llm_max_tokens": int,
     "asr_model_type": str,
     "asr_model_name": str,
+    "streaming_asr_model_name": str,
 }
+
+_BOOL_KEYS = {"streaming_asr_enabled"}
 
 
 def _parse_env_file(path: str) -> dict[str, str]:
@@ -114,6 +118,11 @@ def _load_user_settings() -> int:
             continue
         setattr(settings, key, value)
         loaded += 1
+    for key in _BOOL_KEYS:
+        raw = store.get_setting(key)
+        if raw:
+            setattr(settings, key, raw.lower() == "true")
+            loaded += 1
     if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
         update_llm_config(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
     return loaded
@@ -151,6 +160,31 @@ def on_startup():
     removed = _cleanup_orphan_files()
     if removed:
         print(f"[startup] cleaned {removed} orphan file(s) from {settings.temp_dir}")
+
+    _preload_models()
+
+
+def _preload_models() -> None:
+    """Pre-load final ASR model + streaming ASR if enabled in settings."""
+    def _load_streaming():
+        if not settings.streaming_asr_enabled:
+            return
+        try:
+            from backend.app.services.asr_streaming import StreamingASR
+            StreamingASR.get_instance(settings.streaming_asr_model_name).load()
+        except Exception as e:
+            print(f"[startup] streaming ASR preload failed: {e}")
+
+    def _load_final():
+        try:
+            from backend.app.services.asr import get_asr
+            get_asr(settings.asr_model_type, settings.asr_model_name)
+            print(f"[startup] final ASR model loaded: {settings.asr_model_name}")
+        except Exception as e:
+            print(f"[startup] final ASR preload failed: {e}")
+
+    threading.Thread(target=_load_streaming, daemon=True, name="preload-streaming").start()
+    threading.Thread(target=_load_final, daemon=True, name="preload-final").start()
 
 
 def main():

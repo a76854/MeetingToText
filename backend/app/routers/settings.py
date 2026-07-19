@@ -73,7 +73,12 @@ async def update_settings(body: SettingsUpdate):
         unload_all_asr()
 
     if streaming_asr_touched:
-        StreamingASR.unload_all()
+        if settings.streaming_asr_enabled:
+            import asyncio
+            instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
+            asyncio.create_task(asyncio.to_thread(instance.load))
+        else:
+            StreamingASR.unload_all()
 
     return {"status": "ok"}
 

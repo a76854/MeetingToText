@@ -20,9 +20,12 @@ from backend.app.services.store import get_store
 
 
 PIPELINE_STEPS = [
+    ("queue", "排队等待"),
     ("vad", "执行语音活动检测 (VAD)"),
     ("asr", "执行语音识别与说话人分离 (ASR + CAM++)"),
 ]
+
+_asr_lock = asyncio.Lock()
 
 
 def _initial_progress() -> ProgressInfo:
@@ -130,25 +133,30 @@ async def run_pipeline(task_id: str):
                 "请检查麦克风设置，降低系统输入音量或将麦克风远离音源后重试"
             )
 
-        update_step("vad", "running", "正在分段...", overall=0.1)
-        update_step("asr", "running", "加载模型并识别...", overall=0.2)
+        update_step("queue", "running", "等待前序任务完成...", overall=0.15)
 
-        asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
-        segments_raw = asr_engine.transcribe(asr_input, language="auto")
-        print(f"[pipeline] ASR returned {len(segments_raw)} segments for task={task_id}")
+        async with _asr_lock:
+            update_step("queue", "done", overall=0.2)
 
-        # Fallback: if resampled input yielded 0 segments, retry with the original file
-        if not segments_raw and asr_temp_path is not None:
-            print("[pipeline] Resampled input empty, retrying with original audio")
-            segments_raw = asr_engine.transcribe(original_audio_path, language="auto")
-            print(f"[pipeline] Original-audio ASR returned {len(segments_raw)} segments")
+            update_step("vad", "running", "正在分段...", overall=0.25)
+            update_step("asr", "running", "加载模型并识别...", overall=0.3)
 
-        if not segments_raw:
-            print(f"[pipeline] WARNING: ASR produced 0 segments for task={task_id}; "
-                  f"audio may be too quiet, in unsupported language, or the model failed to load")
+            asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
+            segments_raw = asr_engine.transcribe(asr_input, language="auto")
+            print(f"[pipeline] ASR returned {len(segments_raw)} segments for task={task_id}")
 
-        update_step("vad", "done", overall=0.5)
-        update_step("asr", "done", f"识别完成，共 {len(segments_raw)} 段", overall=1.0)
+            # Fallback: if resampled input yielded 0 segments, retry with the original file
+            if not segments_raw and asr_temp_path is not None:
+                print("[pipeline] Resampled input empty, retrying with original audio")
+                segments_raw = asr_engine.transcribe(original_audio_path, language="auto")
+                print(f"[pipeline] Original-audio ASR returned {len(segments_raw)} segments")
+
+            if not segments_raw:
+                print(f"[pipeline] WARNING: ASR produced 0 segments for task={task_id}; "
+                      f"audio may be too quiet, in unsupported language, or the model failed to load")
+
+            update_step("vad", "done", overall=0.8)
+            update_step("asr", "done", f"识别完成，共 {len(segments_raw)} 段", overall=1.0)
 
         segments = [
             TranscriptSegment(

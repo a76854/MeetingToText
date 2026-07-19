@@ -117,6 +117,7 @@ class StreamingASR:
         self.model_name = model_name
         self.device = device
         self.model = None
+        self._load_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls, model_name: str = "paraformer-zh-streaming", device: str = "cpu") -> "StreamingASR":
@@ -127,12 +128,15 @@ class StreamingASR:
         return cls._instance
 
     def load(self):
-        if self.model is None:
-            from funasr import AutoModel
-            self.model = AutoModel(
-                model=self.model_name,
-                device=self.device,
-            )
+        with self._load_lock:
+            if self.model is None:
+                from funasr import AutoModel
+                print(f"[streaming-asr] Loading model {self.model_name} ...")
+                self.model = AutoModel(
+                    model=self.model_name,
+                    device=self.device,
+                )
+                print(f"[streaming-asr] Model {self.model_name} loaded")
         return self.model
 
     def create_session(self, input_sample_rate: int) -> StreamingASRSession:
