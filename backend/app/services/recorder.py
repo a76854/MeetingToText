@@ -60,5 +60,15 @@ class RecorderManager:
         shutil.move(filepath, dest)
         return dest
 
+    async def cancel_recording(self, task_id: str) -> bool:
+        rec = self._active_recordings.pop(task_id, None)
+        if rec is None:
+            return False
+        # Chunks were held in memory only; no file exists yet -> nothing to clean up
+        return True
+
+    def has_session(self, task_id: str) -> bool:
+        return task_id in self._active_recordings
+
 
 recorder_manager = RecorderManager()

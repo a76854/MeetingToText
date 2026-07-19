@@ -24,11 +24,11 @@ async def start_recording():
 @router.websocket("/record/{task_id}")
 async def record_websocket(websocket: WebSocket, task_id: str):
     await websocket.accept()
-    rec = recorder_manager._active_recordings.get(task_id)
-    if rec is None:
-        await websocket.close(code=1008, reason="Recording not started")
-        return
 
+    if not recorder_manager.has_session(task_id):
+        await recorder_manager.start_recording(task_id)
+
+    intent: str | None = None
     try:
         while True:
             data = await websocket.receive()
@@ -36,7 +36,12 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                 await recorder_manager.add_chunk(task_id, data["bytes"])
             elif "text" in data:
                 msg = json.loads(data["text"])
-                if msg.get("action") == "stop":
+                action = msg.get("action")
+                if action == "stop":
+                    intent = "stop"
+                    break
+                if action == "discard":
+                    intent = "discard"
                     break
                 if msg.get("type") == "config" and isinstance(msg.get("sample_rate"), int):
                     await recorder_manager.set_sample_rate(task_id, msg["sample_rate"])
@@ -45,10 +50,28 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     except Exception:
         pass
 
+    if intent == "discard":
+        await recorder_manager.cancel_recording(task_id)
+        try:
+            await websocket.send_text(json.dumps({"status": "discarded"}))
+        except Exception:
+            pass
+        return
+
+    if intent != "stop":
+        await recorder_manager.cancel_recording(task_id)
+        return
+
     audio_path = await recorder_manager.stop_recording(task_id)
     if audio_path and os.path.exists(audio_path):
         task = create_task(filename=os.path.basename(audio_path), audio_path=audio_path)
         asyncio.create_task(run_pipeline(task.id))
-        await websocket.send_text(json.dumps({"status": "done", "task_id": task.id}))
+        try:
+            await websocket.send_text(json.dumps({"status": "done", "task_id": task.id}))
+        except Exception:
+            pass
     else:
-        await websocket.send_text(json.dumps({"status": "error", "message": "No audio recorded"}))
+        try:
+            await websocket.send_text(json.dumps({"status": "error", "message": "No audio recorded"}))
+        except Exception:
+            pass
