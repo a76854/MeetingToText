@@ -134,7 +134,9 @@ async function clearApiKey() {
 
     <button class="btn-save" @click="saveSettings">保存设置</button>
 
-    <div v-if="saved" class="success-box">设置已保存</div>
+    <Transition name="toast">
+      <div v-if="saved" class="toast">设置已保存</div>
+    </Transition>
     <div v-if="error" class="error-box">{{ error }}</div>
   </div>
 </template>
@@ -222,6 +224,28 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 
 .success-box { padding: 12px; background: #e6f4ea; border-radius: 8px; color: #137333; margin-top: 12px; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-top: 12px; }
+
+.toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 24px;
+  background: #137333;
+  color: white;
+  border-radius: 24px;
+  font-size: 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  pointer-events: none;
+}
+.toast-enter-active, .toast-leave-active {
+  transition: opacity 0.2s, transform 0.2s;
+}
+.toast-enter-from, .toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-8px);
+}
 
 @media (max-width: 640px) {
   .page { max-width: 100%; }

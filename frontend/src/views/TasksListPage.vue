@@ -7,7 +7,6 @@ const router = useRouter()
 const tasks = ref<TaskListItem[]>([])
 const loading = ref(true)
 const error = ref('')
-const playingId = ref<string | null>(null)
 
 onMounted(load)
 
@@ -66,37 +65,6 @@ async function removeTask(t: TaskListItem, e: Event) {
     error.value = e.message || '删除失败'
   }
 }
-
-function togglePlay(t: TaskListItem, e: Event) {
-  e.stopPropagation()
-  const audio = document.getElementById(`audio-${t.id}`) as HTMLAudioElement | null
-  if (!audio) return
-  if (playingId.value && playingId.value !== t.id) {
-    const other = document.getElementById(`audio-${playingId.value}`) as HTMLAudioElement | null
-    other?.pause()
-  }
-  if (audio.paused) {
-    audio.play().then(() => { playingId.value = t.id }).catch(() => {})
-  } else {
-    audio.pause()
-    playingId.value = null
-  }
-}
-
-function onAudioEnded(t: TaskListItem) {
-  if (playingId.value === t.id) playingId.value = null
-}
-
-async function retryTask(t: TaskListItem, e: Event) {
-  e.stopPropagation()
-  if (!confirm(`重新转录「${t.filename}」？当前转录结果将被覆盖。`)) return
-  try {
-    await api.retryTranscribe(t.id)
-    router.push(`/transcript/${t.id}`)
-  } catch (e: any) {
-    error.value = e.message || '重新转录失败'
-  }
-}
 </script>
 
 <template>
@@ -132,25 +100,7 @@ async function retryTask(t: TaskListItem, e: Event) {
           </div>
           <div v-if="t.error" class="task-error">{{ t.error }}</div>
         </div>
-        <div class="task-actions" @click.stop>
-          <button
-            class="btn-action"
-            :title="playingId === t.id ? '暂停' : '播放录音'"
-            @click="togglePlay(t, $event)"
-          >
-            {{ playingId === t.id ? '暂停' : '播放' }}
-          </button>
-          <button
-            v-if="t.status !== 'processing'"
-            class="btn-action"
-            title="重新转录"
-            @click="retryTask(t, $event)"
-          >
-            重转
-          </button>
-          <button class="btn-action danger" title="删除" @click="removeTask(t, $event)">×</button>
-          <audio :id="`audio-${t.id}`" :src="api.audioUrl(t.id)" @ended="onAudioEnded(t)"></audio>
-        </div>
+        <button class="btn-delete" @click="removeTask(t, $event)" title="删除">×</button>
       </div>
     </div>
   </div>
@@ -247,28 +197,18 @@ h1 { font-size: 24px; }
   text-overflow: ellipsis;
 }
 
-.task-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-.btn-action {
+.btn-delete {
   width: 28px;
   height: 28px;
   border: none;
   background: transparent;
-  color: #444;
-  font-size: 14px;
+  color: #aaa;
+  font-size: 18px;
   border-radius: 6px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-shrink: 0;
 }
-.btn-action:hover { background: #f0f6ff; }
-.btn-action.danger { color: #aaa; font-size: 18px; }
-.btn-action.danger:hover { background: #fce8e6; color: #d93025; }
+.btn-delete:hover { background: #fce8e6; color: #d93025; }
 
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 16px; }
 

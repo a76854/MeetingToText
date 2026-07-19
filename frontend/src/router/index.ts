@@ -34,6 +34,11 @@ const router = createRouter({
       name: 'settings',
       component: () => import('../views/SettingsPage.vue'),
     },
+    {
+      path: '/edit/:taskId',
+      name: 'edit',
+      component: () => import('../views/EditPage.vue'),
+    },
   ],
 })
 
