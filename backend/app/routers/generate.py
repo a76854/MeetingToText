@@ -4,6 +4,7 @@ from backend.app.config import settings
 from backend.app.models.schemas import GenerateRequest, GenerateResponse
 from backend.app.services.pipeline import get_task
 from backend.app.services.llm import get_llm
+from backend.app.services.store import get_store
 from backend.app.templates.presets import get_template, get_templates
 
 router = APIRouter(prefix="/api", tags=["generate"])
@@ -45,4 +46,5 @@ async def generate_minutes(req: GenerateRequest):
     )
 
     task.minutes = minutes
+    get_store().save_minutes(req.task_id, minutes)
     return GenerateResponse(minutes=minutes)

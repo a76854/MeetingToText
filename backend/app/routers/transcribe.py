@@ -5,7 +5,8 @@ from fastapi import APIRouter, HTTPException
 from sse_starlette.sse import EventSourceResponse
 
 from backend.app.services.pipeline import get_task, run_pipeline
-from backend.app.models.schemas import TaskInfo
+from backend.app.services.store import get_store
+from backend.app.models.schemas import TaskStatus
 
 router = APIRouter(prefix="/api", tags=["transcribe"])
 
@@ -22,23 +23,25 @@ async def start_transcribe(task_id: str):
 @router.get("/transcribe/{task_id}/stream")
 async def stream_progress(task_id: str):
     async def event_generator():
-        last_overall = -1.0
+        last_status = ""
         while True:
             task = get_task(task_id)
             if task is None:
-                yield {"event": "error", "data": json.dumps({"error": "Task not found"})}
+                yield {"event": "error", "data": json.dumps({"error": "Task not found"}, ensure_ascii=False)}
                 break
 
-            current_json = task.model_dump_json(exclude={"result", "minutes"})
-            yield {"event": "progress", "data": current_json}
-
-            if task.status == "done":
-                full_json = task.model_dump_json()
-                yield {"event": "done", "data": full_json}
-                break
-            elif task.status == "error":
-                yield {"event": "error", "data": json.dumps({"error": task.error})}
-                break
+            current = task.status.value
+            if current != last_status:
+                task_json = task.model_dump_json()
+                if current == TaskStatus.done.value:
+                    yield {"event": "done", "data": task_json}
+                    break
+                elif current == TaskStatus.error.value:
+                    yield {"event": "error", "data": json.dumps({"error": task.error}, ensure_ascii=False)}
+                    break
+                else:
+                    yield {"event": "progress", "data": task_json}
+                last_status = current
 
             await asyncio.sleep(1)
 

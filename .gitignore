@@ -11,8 +11,8 @@ wheels/
 frontend/dist/
 frontend/node_modules/
 
-# Data
-.meetingtotext/
+# Project data
+data/
 
 # Config
 .env
