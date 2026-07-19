@@ -43,7 +43,21 @@ export interface SettingsData {
   llm_base_url: string
   llm_model: string
   llm_api_key_set: boolean
+  llm_temperature: number
+  llm_max_tokens: number
   asr_model_type: string
+  asr_model_name: string
+}
+
+export interface TaskListItem {
+  id: string
+  filename: string
+  status: string
+  created_at: string
+  duration: number
+  has_minutes: boolean
+  has_transcript: boolean
+  error: string
 }
 
 export const api = {
@@ -55,10 +69,21 @@ export const api = {
 
   getTask: (id: string): Promise<TaskInfo> => request(`/task/${id}`),
 
+  listTasks: (): Promise<{ tasks: TaskListItem[] }> => request(`/tasks`),
+
+  deleteTask: (id: string): Promise<{ status: string; task_id: string }> =>
+    request(`/task/${id}`, { method: 'DELETE' }),
+
   startTranscribe: (id: string): Promise<{ status: string; task_id: string }> =>
     request(`/transcribe/${id}`, { method: 'POST' }),
 
   getTranscript: (id: string): Promise<TranscriptData> => request(`/transcript/${id}`),
+
+  updateTranscript: (id: string, segments: any[]): Promise<{ status: string; task_id: string; segment_count: number }> =>
+    request(`/transcript/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ segments }),
+    }),
 
   streamProgress: (id: string, onProgress: (t: TaskInfo) => void, onDone: (t: TaskInfo) => void, onError: (e: string) => void) => {
     const es = new EventSource(BASE + `/transcribe/${id}/stream`)
@@ -81,4 +106,9 @@ export const api = {
 
   updateSettings: (s: Record<string, any>): Promise<{ status: string }> =>
     request('/settings', { method: 'POST', body: JSON.stringify(s) }),
+
+  deleteSetting: (key: string): Promise<{ status: string; key: string }> =>
+    request(`/settings/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  exportUrl: (id: string, format: string) => `${BASE}/export/${id}?format=${encodeURIComponent(format)}`,
 }

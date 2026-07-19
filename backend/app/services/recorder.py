@@ -18,11 +18,23 @@ class RecorderManager:
             "filepath": filepath,
             "chunks": [],
             "sample_rate": settings.target_sr,
+            "sample_rate_confirmed": False,
             "channels": 1,
             "sample_width": 2,
             "started_at": time.time(),
         }
         return filepath
+
+    async def set_sample_rate(self, task_id: str, sample_rate: int):
+        rec = self._active_recordings.get(task_id)
+        if rec is None:
+            return
+        if rec["sample_rate_confirmed"]:
+            return
+        if sample_rate <= 0:
+            return
+        rec["sample_rate"] = sample_rate
+        rec["sample_rate_confirmed"] = True
 
     async def add_chunk(self, task_id: str, chunk: bytes):
         rec = self._active_recordings.get(task_id)

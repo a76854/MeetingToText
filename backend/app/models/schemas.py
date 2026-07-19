@@ -74,14 +74,20 @@ class GenerateResponse(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    llm_base_url: str = ""
-    llm_api_key: str = ""
-    llm_model: str = ""
-    asr_model_type: str = ""
+    llm_base_url: str | None = None
+    llm_api_key: str | None = None
+    llm_model: str | None = None
+    llm_temperature: float | None = None
+    llm_max_tokens: int | None = None
+    asr_model_type: str | None = None
+    asr_model_name: str | None = None
 
 
 class SettingsInfo(BaseModel):
     llm_base_url: str
     llm_model: str
     llm_api_key_set: bool = False
+    llm_temperature: float = 0.3
+    llm_max_tokens: int = 4096
     asr_model_type: str
+    asr_model_name: str = "iic/SenseVoiceSmall"

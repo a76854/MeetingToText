@@ -8,11 +8,26 @@ from backend.app.models.schemas import (
     TaskInfo,
     TaskStatus,
     StepInfo,
+    ProgressInfo,
     TranscriptSegment,
     TaskResult,
 )
-from backend.app.services.asr import create_asr
+from backend.app.services.asr import get_asr
 from backend.app.services.store import get_store
+
+
+PIPELINE_STEPS = [
+    ("vad", "执行语音活动检测 (VAD)"),
+    ("asr", "执行语音识别与说话人分离 (ASR + CAM++)"),
+]
+
+
+def _initial_progress() -> ProgressInfo:
+    return ProgressInfo(
+        current_step="",
+        steps=[StepInfo(name=name, status="pending", message=desc) for name, desc in PIPELINE_STEPS],
+        overall=0.0,
+    )
 
 
 def get_task(task_id: str) -> TaskInfo | None:
@@ -30,14 +45,25 @@ async def run_pipeline(task_id: str):
     if task is None:
         return
 
+    progress = _initial_progress()
+    store.save_progress(task_id, progress)
     store.update_progress(task_id, TaskStatus.processing)
-    steps = [
-        ("vad", "执行语音活动检测 (VAD)"),
-        ("asr", "执行语音识别与说话人分离 (ASR + CAM++)"),
-    ]
 
-    def update_step(name: str, status: str, message: str = ""):
-        pass
+    def update_step(name: str, status: str, message: str = "", overall: float | None = None) -> None:
+        for step in progress.steps:
+            if step.name == name:
+                step.status = status
+                if message:
+                    step.message = message
+                break
+        if status == "running":
+            progress.current_step = name
+        elif status == "done":
+            done_count = sum(1 for s in progress.steps if s.status == "done")
+            progress.overall = done_count / max(len(progress.steps), 1)
+        if overall is not None:
+            progress.overall = overall
+        store.save_progress(task_id, progress)
 
     try:
         audio_path = task.audio_path
@@ -64,8 +90,13 @@ async def run_pipeline(task_id: str):
                 "请检查麦克风设置，降低系统输入音量或将麦克风远离音源后重试"
             )
 
-        asr_engine = create_asr(settings.asr_model_type, settings.asr_model_name)
+        update_step("vad", "running", "正在分段...", overall=0.1)
+        update_step("asr", "running", "加载模型并识别...", overall=0.2)
+
+        asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
         segments_raw = asr_engine.transcribe(audio_path, language="auto")
+        update_step("vad", "done", overall=0.5)
+        update_step("asr", "done", f"识别完成，共 {len(segments_raw)} 段", overall=1.0)
 
         segments = [
             TranscriptSegment(

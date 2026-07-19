@@ -3,7 +3,7 @@ import sqlite3
 import threading
 
 from backend.app.config import settings
-from backend.app.models.schemas import TaskInfo, TaskStatus, ProgressInfo, TaskResult, TranscriptSegment
+from backend.app.models.schemas import TaskInfo, TaskStatus, ProgressInfo, TaskResult, TranscriptSegment, StepInfo
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -16,8 +16,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     segments TEXT DEFAULT '[]',
     full_text TEXT DEFAULT '',
     minutes TEXT DEFAULT '',
-    error TEXT DEFAULT ''
-)
+    error TEXT DEFAULT '',
+    progress TEXT DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at DESC);
 """
 
 
@@ -29,7 +36,10 @@ class TaskStore:
 
     def _init_db(self):
         with self._get_conn() as conn:
-            conn.execute(SCHEMA)
+            conn.executescript(SCHEMA)
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
+            if "progress" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN progress TEXT DEFAULT '{}'")
             conn.commit()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -40,14 +50,16 @@ class TaskStore:
         return conn
 
     def create(self, task: TaskInfo) -> TaskInfo:
+        progress_json = json.dumps(task.progress.model_dump(), ensure_ascii=False)
         with self._lock:
             with self._get_conn() as conn:
                 conn.execute(
-                    "INSERT INTO tasks (id, filename, audio_path, status, created_at, duration, segments, full_text, minutes, error) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO tasks (id, filename, audio_path, status, created_at, duration, segments, full_text, minutes, error, progress) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         task.id, task.filename, task.audio_path,
-                        task.status.value, task.created_at, 0.0, "[]", "", "", ""
+                        task.status.value, task.created_at, 0.0, "[]", "", "", "",
+                        progress_json,
                     ),
                 )
                 conn.commit()
@@ -71,6 +83,14 @@ class TaskStore:
                                  (status.value, task_id))
                 conn.commit()
 
+    def save_progress(self, task_id: str, progress: ProgressInfo):
+        progress_json = json.dumps(progress.model_dump(), ensure_ascii=False)
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute("UPDATE tasks SET progress = ? WHERE id = ?",
+                             (progress_json, task_id))
+                conn.commit()
+
     def save_result(self, task_id: str, result: TaskResult):
         segments_json = json.dumps([s.model_dump() for s in result.segments], ensure_ascii=False)
         with self._lock:
@@ -85,6 +105,54 @@ class TaskStore:
         with self._lock:
             with self._get_conn() as conn:
                 conn.execute("UPDATE tasks SET minutes = ? WHERE id = ?", (minutes, task_id))
+                conn.commit()
+
+    def update_segments(self, task_id: str, segments: list[TranscriptSegment], full_text: str):
+        segments_json = json.dumps([s.model_dump() for s in segments], ensure_ascii=False)
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute(
+                    "UPDATE tasks SET segments = ?, full_text = ? WHERE id = ?",
+                    (segments_json, full_text, task_id),
+                )
+                conn.commit()
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        with self._get_conn() as conn:
+            row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute(
+                    "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+                    (key, value),
+                )
+                conn.commit()
+
+    def set_settings(self, mapping: dict[str, str]) -> None:
+        if not mapping:
+            return
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.executemany(
+                    "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
+                    list(mapping.items()),
+                )
+                conn.commit()
+
+    def get_all_settings(self) -> dict[str, str]:
+        with self._get_conn() as conn:
+            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
+    def delete_setting(self, key: str) -> None:
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute("DELETE FROM app_settings WHERE key = ?", (key,))
                 conn.commit()
 
     def list_tasks(self, limit: int = 50) -> list[TaskInfo]:
@@ -110,13 +178,25 @@ class TaskStore:
             duration=row["duration"] or 0.0,
         ) if (segments or row["full_text"]) else None
 
+        progress = ProgressInfo()
+        try:
+            raw = json.loads(row["progress"] or "{}")
+            if raw:
+                progress = ProgressInfo(
+                    current_step=raw.get("current_step", ""),
+                    steps=[StepInfo(**s) for s in raw.get("steps", [])],
+                    overall=raw.get("overall", 0.0),
+                )
+        except Exception:
+            pass
+
         return TaskInfo(
             id=row["id"],
             status=TaskStatus(row["status"]),
             filename=row["filename"],
             audio_path=row["audio_path"],
             created_at=row["created_at"],
-            progress=ProgressInfo(),
+            progress=progress,
             result=result,
             minutes=row["minutes"] or None,
             error=row["error"] or None,

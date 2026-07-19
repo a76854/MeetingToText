@@ -12,15 +12,12 @@ class Settings(BaseSettings):
     model_config = {
         "protected_namespaces": ("settings_",),
         "env_prefix": "MTT_",
-        "env_file": os.path.join(PROJECT_ROOT, ".env"),
-        "env_file_encoding": "utf-8",
     }
 
     data_dir: str = DATA_DIR
-    upload_dir: str = os.path.join(DATA_DIR, "uploads")
-    model_cache_dir: str = os.path.join(DATA_DIR, "models")
-    temp_dir: str = os.path.join(DATA_DIR, "temp")
-    db_path: str = os.path.join(DATA_DIR, "meetingtotext.db")
+
+    target_sr: int = 16000
+    max_upload_bytes: int = 500 * 1024 * 1024  # 500MB
 
     asr_model_type: str = "sensevoice"
     asr_model_name: str = "iic/SenseVoiceSmall"
@@ -31,7 +28,21 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
 
-    target_sr: int = 16000
+    @property
+    def upload_dir(self) -> str:
+        return os.path.join(self.data_dir, "uploads")
+
+    @property
+    def model_cache_dir(self) -> str:
+        return os.path.join(self.data_dir, "models")
+
+    @property
+    def temp_dir(self) -> str:
+        return os.path.join(self.data_dir, "temp")
+
+    @property
+    def db_path(self) -> str:
+        return os.path.join(self.data_dir, "meetingtotext.db")
 
 
 settings = Settings()

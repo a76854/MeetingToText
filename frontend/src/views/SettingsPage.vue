@@ -5,7 +5,11 @@ import { api } from '../api/client'
 const llmBaseUrl = ref('')
 const llmApiKey = ref('')
 const llmModel = ref('')
+const llmTemperature = ref(0.3)
+const llmMaxTokens = ref(4096)
 const asrModelType = ref('sensevoice')
+const asrModelName = ref('iic/SenseVoiceSmall')
+const apiKeySet = ref(false)
 const saved = ref(false)
 const error = ref('')
 
@@ -14,7 +18,11 @@ onMounted(async () => {
     const s = await api.getSettings()
     llmBaseUrl.value = s.llm_base_url
     llmModel.value = s.llm_model
+    llmTemperature.value = s.llm_temperature
+    llmMaxTokens.value = s.llm_max_tokens
     asrModelType.value = s.asr_model_type
+    asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
+    apiKeySet.value = s.llm_api_key_set
   } catch (e: any) {
     error.value = e.message
   }
@@ -28,12 +36,29 @@ async function saveSettings() {
       llm_base_url: llmBaseUrl.value,
       llm_api_key: llmApiKey.value,
       llm_model: llmModel.value,
+      llm_temperature: llmTemperature.value,
+      llm_max_tokens: llmMaxTokens.value,
       asr_model_type: asrModelType.value,
+      asr_model_name: asrModelName.value,
     })
     saved.value = true
+    apiKeySet.value = apiKeySet.value || !!llmApiKey.value
+    llmApiKey.value = ''
     setTimeout(() => { saved.value = false }, 3000)
   } catch (e: any) {
     error.value = e.message || '保存失败'
+  }
+}
+
+async function clearApiKey() {
+  if (!confirm('确认清除当前 API Key？清除后需重新填入才能生成纪要。')) return
+  try {
+    await api.deleteSetting('llm_api_key')
+    apiKeySet.value = false
+    saved.value = true
+    setTimeout(() => { saved.value = false }, 3000)
+  } catch (e: any) {
+    error.value = e.message || '清除失败'
   }
 }
 </script>
@@ -41,6 +66,7 @@ async function saveSettings() {
 <template>
   <div class="page">
     <h1>设置</h1>
+    <p class="hint">设置保存在 <code>data/meetingtotext.db</code> 的 <code>app_settings</code> 表中。</p>
 
     <div class="section">
       <h2>LLM 配置</h2>
@@ -49,13 +75,29 @@ async function saveSettings() {
         <input v-model="llmBaseUrl" placeholder="https://api.deepseek.com" class="input" />
       </label>
       <label class="field">
-        <span>API Key</span>
-        <input v-model="llmApiKey" type="password" placeholder="sk-..." class="input" />
+        <span>
+          API Key
+          <span v-if="apiKeySet" class="badge">已设置</span>
+        </span>
+        <div class="key-row">
+          <input v-model="llmApiKey" type="password" :placeholder="apiKeySet ? '留空保留原 Key' : 'sk-...'" class="input" />
+          <button v-if="apiKeySet" class="btn-clear" @click="clearApiKey" title="清除已保存的 Key">清除</button>
+        </div>
       </label>
       <label class="field">
         <span>模型</span>
         <input v-model="llmModel" placeholder="deepseek-chat" class="input" />
       </label>
+      <div class="row-2">
+        <label class="field">
+          <span>温度 ({{ llmTemperature }})</span>
+          <input v-model.number="llmTemperature" type="range" min="0" max="2" step="0.1" />
+        </label>
+        <label class="field">
+          <span>最大输出 tokens</span>
+          <input v-model.number="llmMaxTokens" type="number" min="256" max="32768" step="256" class="input" />
+        </label>
+      </div>
     </div>
 
     <div class="section">
@@ -67,6 +109,10 @@ async function saveSettings() {
           <option value="paraformer">Paraformer (更高精度)</option>
         </select>
       </label>
+      <label class="field">
+        <span>ASR 模型名 (ModelScope)</span>
+        <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
+      </label>
     </div>
 
     <button class="btn-save" @click="saveSettings">保存设置</button>
@@ -77,8 +123,10 @@ async function saveSettings() {
 </template>
 
 <style scoped>
-.page { max-width: 560px; margin: 0 auto; }
-h1 { font-size: 24px; margin-bottom: 24px; }
+.page { max-width: 600px; margin: 0 auto; }
+h1 { font-size: 24px; margin-bottom: 8px; }
+.hint { font-size: 12px; color: #888; margin-bottom: 20px; }
+.hint code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 11px; }
 
 .section {
   background: white;
@@ -91,14 +139,38 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .field span { font-size: 13px; color: #666; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.badge {
+  font-size: 11px;
+  color: #137333;
+  background: #e6f4ea;
+  padding: 1px 6px;
+  border-radius: 3px;
+  margin-left: 6px;
+}
 
 .input {
   padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 14px;
+  font-family: inherit;
 }
 .input:focus { outline: none; border-color: #1a73e8; }
+
+.key-row { display: flex; gap: 8px; }
+.key-row .input { flex: 1; }
+.btn-clear {
+  padding: 0 12px;
+  background: white;
+  border: 1px solid #f4c2c0;
+  color: #d93025;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn-clear:hover { background: #fce8e6; }
 
 .btn-save {
   width: 100%;

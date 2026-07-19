@@ -38,6 +38,8 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                 msg = json.loads(data["text"])
                 if msg.get("action") == "stop":
                     break
+                if msg.get("type") == "config" and isinstance(msg.get("sample_rate"), int):
+                    await recorder_manager.set_sample_rate(task_id, msg["sample_rate"])
     except WebSocketDisconnect:
         pass
     except Exception:

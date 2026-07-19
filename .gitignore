@@ -14,9 +14,6 @@ frontend/node_modules/
 # Project data
 data/
 
-# Config
-.env
-
 # IDE
 .idea/
 .vscode/

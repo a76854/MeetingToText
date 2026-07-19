@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { marked } from 'marked'
 import { api } from '../api/client'
 
 const route = useRoute()
@@ -12,6 +13,8 @@ const customInstructions = ref('')
 const generating = ref(false)
 const minutes = ref('')
 const error = ref('')
+
+marked.setOptions({ breaks: true, gfm: true })
 
 onMounted(async () => {
   try {
@@ -25,7 +28,6 @@ onMounted(async () => {
 async function doGenerate() {
   generating.value = true
   error.value = ''
-  minutes.value = ''
   try {
     const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value)
     minutes.value = res.minutes
@@ -36,21 +38,23 @@ async function doGenerate() {
   }
 }
 
+const minutesHtml = computed(() => minutes.value ? marked.parse(minutes.value) as string : '')
+
 function copyToClipboard() {
   navigator.clipboard.writeText(minutes.value)
 }
 
-function renderedMarkdown(text: string): string {
-  return text
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/^### (.*$)/gm, '<h3>$1</h3>')
-    .replace(/^## (.*$)/gm, '<h2>$1</h2>')
-    .replace(/^# (.*$)/gm, '<h1>$1</h1>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/^- (.*$)/gm, '<li>$1</li>')
-    .replace(/(<li>.*<\/li>)/gs, (match) => `<ul>${match}</ul>`)
-    .replace(/\n/g, '<br>')
+function downloadMarkdown() {
+  const url = api.exportUrl(taskId, 'md')
+  fetch(url).then(r => r.blob()).then(blob => {
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = ''
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(a.href)
+  })
 }
 </script>
 
@@ -87,9 +91,12 @@ function renderedMarkdown(text: string): string {
     <div v-if="minutes" class="minutes-output">
       <div class="minutes-header">
         <span>生成结果</span>
-        <button class="btn-copy" @click="copyToClipboard">复制</button>
+        <div class="minutes-actions">
+          <button class="btn-mini" @click="downloadMarkdown" title="下载 Markdown（包含转录）">下载 .md</button>
+          <button class="btn-mini" @click="copyToClipboard">复制</button>
+        </div>
       </div>
-      <div class="minutes-content" v-html="renderedMarkdown(minutes)" />
+      <div class="minutes-content" v-html="minutesHtml" />
     </div>
   </div>
 </template>
@@ -155,27 +162,38 @@ h1 { font-size: 24px; margin-bottom: 24px; }
   border-bottom: 1px solid #eee;
   font-weight: 600;
 }
-.btn-copy {
-  padding: 6px 14px;
+.minutes-actions { display: flex; gap: 8px; }
+.btn-mini {
+  padding: 6px 12px;
   background: #f0f0f0;
   border: none;
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
+  color: #444;
 }
-.btn-copy:hover { background: #e0e0e0; }
+.btn-mini:hover { background: #e0e0e0; }
 
 .minutes-content {
   font-size: 15px;
   line-height: 1.8;
 }
-.minutes-content :deep(h1) { font-size: 20px; margin: 16px 0 8px; }
-.minutes-content :deep(h2) { font-size: 17px; margin: 14px 0 6px; }
-.minutes-content :deep(h3) { font-size: 15px; margin: 10px 0 4px; }
-.minutes-content :deep(ul) { padding-left: 20px; margin: 8px 0; }
+.minutes-content :deep(h1) { font-size: 22px; margin: 18px 0 10px; border-bottom: 1px solid #eee; padding-bottom: 6px; }
+.minutes-content :deep(h2) { font-size: 18px; margin: 16px 0 8px; }
+.minutes-content :deep(h3) { font-size: 16px; margin: 12px 0 6px; }
+.minutes-content :deep(h4) { font-size: 15px; margin: 10px 0 4px; }
+.minutes-content :deep(p) { margin: 8px 0; }
+.minutes-content :deep(ul),
+.minutes-content :deep(ol) { padding-left: 24px; margin: 8px 0; }
 .minutes-content :deep(li) { margin: 4px 0; }
 .minutes-content :deep(strong) { font-weight: 600; }
 .minutes-content :deep(code) { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+.minutes-content :deep(pre) { background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; }
+.minutes-content :deep(blockquote) { border-left: 3px solid #ddd; padding-left: 12px; color: #666; margin: 8px 0; }
+.minutes-content :deep(table) { border-collapse: collapse; margin: 8px 0; width: 100%; }
+.minutes-content :deep(th),
+.minutes-content :deep(td) { border: 1px solid #ddd; padding: 6px 10px; }
+.minutes-content :deep(th) { background: #f7f7f7; }
 
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 16px; }
 </style>

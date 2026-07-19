@@ -30,7 +30,7 @@ function formatTime(s: number): string {
 }
 
 function setupAudioPipeline(s: MediaStream) {
-  audioCtx = new AudioContext({ sampleRate: 16000 })
+  audioCtx = new AudioContext()
   const source = audioCtx.createMediaStreamSource(s)
 
   analyser = audioCtx.createAnalyser()
@@ -132,6 +132,9 @@ async function startRecording() {
   ws.onopen = () => {
     if (wsTimeout) clearTimeout(wsTimeout)
     wsTimeout = null
+    if (audioCtx) {
+      ws!.send(JSON.stringify({ type: 'config', sample_rate: audioCtx.sampleRate }))
+    }
     state.value = 'recording'
     startTime = Date.now()
     elapsedSec.value = 0

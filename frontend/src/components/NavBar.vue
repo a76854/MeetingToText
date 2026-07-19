@@ -12,6 +12,7 @@ const isActive = (name: string) => computed(() => route.name === name ? 'active'
     <div class="nav-links">
       <RouterLink to="/upload" :class="isActive('upload').value">上传文件</RouterLink>
       <RouterLink to="/record" :class="isActive('record').value">实时录音</RouterLink>
+      <RouterLink to="/tasks" :class="isActive('tasks').value">历史任务</RouterLink>
       <RouterLink to="/settings" :class="isActive('settings').value">设置</RouterLink>
     </div>
   </nav>

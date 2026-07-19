@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 import re
+import threading
 
 
 def _clean_text(text: str) -> str:
@@ -147,3 +148,29 @@ def create_asr(model_type: str, model_name: Optional[str] = None) -> BaseASR:
     if model_name:
         kwargs["model_name"] = model_name
     return cls(**kwargs)
+
+
+_asr_cache: dict[str, BaseASR] = {}
+_asr_lock = threading.Lock()
+
+
+def get_asr(model_type: str, model_name: Optional[str] = None) -> BaseASR:
+    key = f"{model_type}:{model_name or ''}"
+    engine = _asr_cache.get(key)
+    if engine is not None:
+        return engine
+    with _asr_lock:
+        engine = _asr_cache.get(key)
+        if engine is not None:
+            return engine
+        engine = create_asr(model_type, model_name)
+        engine.load_model()
+        _asr_cache[key] = engine
+        return engine
+
+
+def unload_all_asr() -> None:
+    with _asr_lock:
+        for engine in _asr_cache.values():
+            engine.unload()
+        _asr_cache.clear()

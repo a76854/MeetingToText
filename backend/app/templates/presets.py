@@ -1,4 +1,4 @@
-TEMPlATES = {
+TEMPLATES = {
     "meeting_minutes": {
         "id": "meeting_minutes",
         "name": "标准会议纪要",
@@ -63,7 +63,7 @@ TEMPlATES = {
 def get_templates() -> list[dict]:
     return [
         {"id": t["id"], "name": t["name"], "description": t["description"]}
-        for t in TEMPlATES.values()
+        for t in TEMPLATES.values()
     ]
 
 

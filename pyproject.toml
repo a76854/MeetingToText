@@ -23,7 +23,7 @@ dependencies = [
 ]
 
 [project.scripts]
-meetingtotext = "backend.server:main"
+meetingtotext = "backend.app.server:main"
 
 [tool.setuptools.packages.find]
 include = ["backend*"]

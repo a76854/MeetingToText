@@ -15,6 +15,11 @@ const router = createRouter({
       component: () => import('../views/RecordPage.vue'),
     },
     {
+      path: '/tasks',
+      name: 'tasks',
+      component: () => import('../views/TasksListPage.vue'),
+    },
+    {
       path: '/transcript/:taskId',
       name: 'transcript',
       component: () => import('../views/TranscriptPage.vue'),
