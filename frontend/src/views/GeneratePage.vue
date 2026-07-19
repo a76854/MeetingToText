@@ -109,6 +109,9 @@ h1 { font-size: 24px; margin-bottom: 24px; }
 .field-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #444; }
 
 .template-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 640px) {
+  .template-list { grid-template-columns: 1fr; }
+}
 .template-card {
   padding: 14px;
   border: 2px solid #e0e0e0;
@@ -196,4 +199,11 @@ h1 { font-size: 24px; margin-bottom: 24px; }
 .minutes-content :deep(th) { background: #f7f7f7; }
 
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 16px; }
+
+@media (max-width: 640px) {
+  .page { max-width: 100%; }
+  h1 { font-size: 20px; }
+  .minutes-output { padding: 16px; }
+  .minutes-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+}
 </style>

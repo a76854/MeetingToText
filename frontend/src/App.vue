@@ -19,11 +19,20 @@ import NavBar from './components/NavBar.vue'
   box-sizing: border-box;
 }
 
+html, body {
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   background: #f5f7fa;
   color: #333;
   min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+input, textarea, select, button {
+  font-family: inherit;
 }
 
 .app-container {
@@ -34,5 +43,10 @@ body {
 
 .main-content {
   padding: 24px 0;
+}
+
+@media (max-width: 640px) {
+  .app-container { padding: 0 12px; }
+  .main-content { padding: 16px 0; }
 }
 </style>

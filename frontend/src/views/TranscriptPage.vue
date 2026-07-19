@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { api } from '../api/client'
 import ProgressIndicator from '../components/ProgressIndicator.vue'
@@ -29,6 +29,13 @@ onMounted(async () => {
     subscribeProgress()
   }
   loading.value = false
+  // Auto-size all textareas after render
+  nextTick(() => {
+    document.querySelectorAll<HTMLTextAreaElement>('.edit-segment .inp-text').forEach(el => {
+      el.style.height = 'auto'
+      el.style.height = Math.min(el.scrollHeight, 400) + 'px'
+    })
+  })
 })
 
 onUnmounted(() => {
@@ -99,6 +106,21 @@ function addSegment() {
   const last = segments.value[segments.value.length - 1]
   const start = last ? last.end : 0
   segments.value.push({ start, end: start + 5, speaker: last?.speaker || '', text: '' })
+  markDirty()
+  nextTick(() => {
+    const list = document.querySelectorAll<HTMLTextAreaElement>('.edit-segment .inp-text')
+    const last = list[list.length - 1]
+    if (last) {
+      last.focus()
+      autoResizeTextarea({ target: last } as unknown as Event)
+    }
+  })
+}
+
+function autoResizeTextarea(e: Event) {
+  const el = e.target as HTMLTextAreaElement
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 400) + 'px'
   markDirty()
 }
 
@@ -218,8 +240,8 @@ function exportAs(format: string) {
 
       <div v-else class="edit-mode">
         <div class="edit-toolbar">
-          <span class="edit-hint">逐段编辑后点「保存修改」即可更新转录文本（生成纪要时会用最新内容）</span>
-          <button class="btn-add" @click="addSegment">+ 新增一段</button>
+          <span class="edit-hint">逐段编辑后点「保存修改」</span>
+          <button class="btn-add" @click="addSegment">+ 新增段落</button>
         </div>
         <div v-for="(seg, i) in segments" :key="i" class="edit-segment">
           <div class="edit-row">
@@ -256,8 +278,8 @@ function exportAs(format: string) {
           <textarea
             v-model="seg.text"
             class="inp-text"
-            rows="2"
-            @input="markDirty"
+            rows="3"
+            @input="autoResizeTextarea"
           />
         </div>
         <div v-if="!segments.length" class="empty-hint">
@@ -409,32 +431,34 @@ h1 { font-size: 24px; }
   flex-wrap: wrap;
 }
 .inp-speaker {
-  width: 90px;
-  padding: 4px 8px;
+  width: 110px;
+  padding: 6px 10px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
+  min-height: 34px;
 }
 .inp-time {
-  width: 64px;
-  padding: 4px 6px;
+  width: 76px;
+  padding: 6px 8px;
   border: 1px solid #ddd;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  min-height: 34px;
 }
 .seg-unit { font-size: 11px; color: #999; margin-right: auto; }
 .dash { color: #999; }
-.seg-actions { display: flex; gap: 4px; }
+.seg-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .btn-mini {
-  width: 26px;
-  height: 26px;
+  width: 32px;
+  height: 32px;
   border: 1px solid #ddd;
   background: white;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 14px;
   color: #666;
 }
 .btn-mini:hover:not(:disabled) { background: #f0f0f0; }
@@ -444,13 +468,17 @@ h1 { font-size: 24px; }
 
 .inp-text {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 6px;
   font-size: 14px;
   font-family: inherit;
   resize: vertical;
-  line-height: 1.5;
+  min-height: 72px;
+  max-height: 400px;
+  line-height: 1.6;
+  box-sizing: border-box;
+  overflow-y: auto;
 }
 .inp-text:focus { outline: none; border-color: #1a73e8; }
 .inp-speaker:focus, .inp-time:focus { outline: none; border-color: #1a73e8; }
@@ -484,4 +512,18 @@ h1 { font-size: 24px; }
 .status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 12px; }
 .info-box { padding: 10px 14px; background: #e6f4ea; border-radius: 8px; color: #137333; margin-bottom: 12px; font-size: 13px; }
+
+@media (max-width: 640px) {
+  .page { max-width: 100%; }
+  .header { flex-direction: column; align-items: stretch; }
+  h1 { font-size: 20px; }
+  .header-actions { justify-content: flex-end; }
+  .edit-row { gap: 6px; }
+  .inp-speaker { width: 90px; min-height: 36px; }
+  .inp-time { width: 64px; min-height: 36px; }
+  .btn-mini { width: 36px; height: 36px; font-size: 15px; }
+  .footer-actions { flex-direction: column; align-items: stretch; }
+  .export-group { justify-content: flex-start; }
+  .inp-text { font-size: 16px; }  /* 防止 iOS 自动放大 */
+}
 </style>

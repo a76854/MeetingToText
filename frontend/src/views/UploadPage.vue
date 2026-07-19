@@ -108,4 +108,11 @@ h1 { font-size: 24px; margin-bottom: 8px; }
 
 .status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; margin-top: 16px; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-top: 16px; }
+
+@media (max-width: 640px) {
+  .page { max-width: 100%; }
+  h1 { font-size: 20px; }
+  .upload-area { padding: 32px 16px; }
+  .upload-icon { font-size: 36px; }
+}
 </style>

@@ -53,4 +53,11 @@ const isActive = (name: string) => computed(() => route.name === name ? 'active'
   color: #1a73e8;
   border-bottom-color: #1a73e8;
 }
+
+@media (max-width: 640px) {
+  .navbar { padding: 12px 0; flex-wrap: wrap; gap: 8px; }
+  .nav-brand { font-size: 16px; }
+  .nav-links { gap: 14px; flex-wrap: wrap; }
+  .nav-links a { font-size: 13px; padding: 4px 0; }
+}
 </style>

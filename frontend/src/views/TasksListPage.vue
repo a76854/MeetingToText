@@ -211,4 +211,14 @@ h1 { font-size: 24px; }
 .btn-delete:hover { background: #fce8e6; color: #d93025; }
 
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 16px; }
+
+@media (max-width: 640px) {
+  .page { max-width: 100%; }
+  h1 { font-size: 20px; }
+  .task-card { padding: 12px; gap: 10px; }
+  .task-icon { width: 36px; height: 36px; font-size: 18px; }
+  .task-name { font-size: 13px; }
+  .task-meta { font-size: 11px; gap: 6px; }
+  .btn-delete { width: 32px; height: 32px; font-size: 20px; }
+}
 </style>

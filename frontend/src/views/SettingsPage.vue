@@ -66,7 +66,6 @@ async function clearApiKey() {
 <template>
   <div class="page">
     <h1>设置</h1>
-    <p class="hint">设置保存在 <code>data/meetingtotext.db</code> 的 <code>app_settings</code> 表中。</p>
 
     <div class="section">
       <h2>LLM 配置</h2>
@@ -140,6 +139,9 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
 .field span { font-size: 13px; color: #666; }
 .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) {
+  .row-2 { grid-template-columns: 1fr; }
+}
 
 .badge {
   font-size: 11px;
@@ -186,4 +188,11 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
 
 .success-box { padding: 12px; background: #e6f4ea; border-radius: 8px; color: #137333; margin-top: 12px; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-top: 12px; }
+
+@media (max-width: 640px) {
+  .page { max-width: 100%; }
+  h1 { font-size: 20px; }
+  .section { padding: 16px; }
+  .input { font-size: 16px; }  /* 防止 iOS 自动放大 */
+}
 </style>
