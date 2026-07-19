@@ -155,6 +155,7 @@ def main():
         host="0.0.0.0",
         port=8000,
         reload=True,
+        reload_dirs=[os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend")],
     )
 
 

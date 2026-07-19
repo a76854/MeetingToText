@@ -164,6 +164,7 @@ function attachWsHandlers(router: any) {
           await new Promise(r => setTimeout(r, 500))
           router.push(`/transcript/${msg.task_id}`)
         }
+        state.value = 'idle'
       } else if (msg.status === 'error') {
         state.value = 'idle'
         error.value = msg.message || '服务器处理失败'
