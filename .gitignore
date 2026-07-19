@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+
+# Frontend
+frontend/dist/
+frontend/node_modules/
+
+# Data
+.meetingtotext/
+
+# Config
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

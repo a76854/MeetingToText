@@ -1,0 +1,29 @@
+[project]
+name = "meetingtotext"
+version = "0.1.0"
+description = "会议录音转写与纪要生成系统"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "python-multipart>=0.0.20",
+    "sse-starlette>=2.2.0",
+    "websockets>=10.0",
+    "openai>=1.60.0",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "soundfile>=0.12.0",
+    "librosa>=0.10.0",
+    "numpy>=1.26.0",
+    "funasr>=1.2.0",
+    "torch>=2.5.0",
+    "onnxruntime>=1.6.0",
+    "modelscope>=1.22.0",
+]
+
+[project.scripts]
+meetingtotext = "backend.server:main"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]

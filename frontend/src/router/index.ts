@@ -1,0 +1,35 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', redirect: '/upload' },
+    {
+      path: '/upload',
+      name: 'upload',
+      component: () => import('../views/UploadPage.vue'),
+    },
+    {
+      path: '/record',
+      name: 'record',
+      component: () => import('../views/RecordPage.vue'),
+    },
+    {
+      path: '/transcript/:taskId',
+      name: 'transcript',
+      component: () => import('../views/TranscriptPage.vue'),
+    },
+    {
+      path: '/generate/:taskId',
+      name: 'generate',
+      component: () => import('../views/GeneratePage.vue'),
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: () => import('../views/SettingsPage.vue'),
+    },
+  ],
+})
+
+export default router

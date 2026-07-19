@@ -1,0 +1,52 @@
+import os
+import asyncio
+import wave
+import struct
+import time
+from pathlib import Path
+
+from backend.app.config import settings
+
+
+class RecorderManager:
+    def __init__(self):
+        self._active_recordings: dict[str, dict] = {}
+
+    async def start_recording(self, task_id: str) -> str:
+        filepath = os.path.join(settings.temp_dir, f"record_{task_id}_{int(time.time())}.wav")
+        self._active_recordings[task_id] = {
+            "filepath": filepath,
+            "chunks": [],
+            "sample_rate": settings.target_sr,
+            "channels": 1,
+            "sample_width": 2,
+            "started_at": time.time(),
+        }
+        return filepath
+
+    async def add_chunk(self, task_id: str, chunk: bytes):
+        rec = self._active_recordings.get(task_id)
+        if rec is None:
+            return
+        rec["chunks"].append(chunk)
+
+    async def stop_recording(self, task_id: str) -> str | None:
+        rec = self._active_recordings.pop(task_id, None)
+        if rec is None:
+            return None
+        filepath = rec["filepath"]
+        all_data = b"".join(rec["chunks"])
+        if not all_data:
+            return None
+        with wave.open(filepath, "wb") as wf:
+            wf.setnchannels(rec["channels"])
+            wf.setsampwidth(rec["sample_width"])
+            wf.setframerate(rec["sample_rate"])
+            wf.writeframes(all_data)
+        import shutil
+        dest = os.path.join(settings.upload_dir, os.path.basename(filepath))
+        shutil.move(filepath, dest)
+        return dest
+
+
+recorder_manager = RecorderManager()
