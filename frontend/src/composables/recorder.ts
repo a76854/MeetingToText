@@ -15,6 +15,7 @@ export const audioSource = ref('mic')
 export const liveText = ref('')
 export const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error'>('idle')
 export const liveError = ref('')
+export const warning = ref('')
 
 let ws: WebSocket | null = null
 let audioCtx: AudioContext | null = null
@@ -22,6 +23,7 @@ let analyser: AnalyserNode | null = null
 let workletNode: AudioWorkletNode | null = null
 let animFrame: number | null = null
 let stream: MediaStream | null = null
+let mergeCtx: AudioContext | null = null
 let startTime = 0
 let timerInterval: number | null = null
 let wsTimeout: number | null = null
@@ -146,17 +148,25 @@ function setupLocalRecorder(s: MediaStream) {
   mediaRecorder.start(1000)
 }
 
-function teardownAudio() {
+function teardownAudioGraph() {
   if (mediaRecorder && mediaRecorder.state === 'recording') {
     mediaRecorder.stop()
   }
   mediaRecorder = null
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
   if (workletNode) { workletNode.disconnect(); workletNode = null }
+  workletNode = null
   if (analyser) { analyser.disconnect(); analyser = null }
+  analyser = null
   if (audioCtx) { audioCtx.close(); audioCtx = null }
-  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null }
+  audioCtx = null
   volume.value = 0
+}
+
+function teardownAudio() {
+  teardownAudioGraph()
+  if (mergeCtx) { mergeCtx.close().catch(() => {}); mergeCtx = null }
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null }
 }
 
 function closeWs() {
@@ -184,6 +194,7 @@ function resetAll() {
   liveText.value = ''
   liveStatus.value = 'idle'
   liveError.value = ''
+  warning.value = ''
 }
 
 function attachWsHandlers(router: any) {
@@ -264,56 +275,70 @@ export async function startRecording(router: any) {
     }
   }, 10000)
 
-  let mediaStream: MediaStream
+  let mediaStream: MediaStream | undefined
+  warning.value = ''
   try {
     const hasMic = audioSource.value.includes('mic')
     const hasSystem = audioSource.value.includes('system')
+    const micConstraints = {
+      audio: {
+        echoCancellation: noiseSuppression.value,
+        noiseSuppression: noiseSuppression.value,
+        autoGainControl: noiseSuppression.value,
+      }
+    }
+    const sysConstraints = {
+      video: true,
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        ...({ suppressLocalAudioPlayback: false } as any),
+      },
+    } as MediaStreamConstraints
 
     if (hasMic && hasSystem) {
-      const micStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: noiseSuppression.value,
-          noiseSuppression: noiseSuppression.value,
-          autoGainControl: noiseSuppression.value,
+      let micStream: MediaStream | null = null
+      let micFailed = false
+      try {
+        micStream = await navigator.mediaDevices.getUserMedia(micConstraints)
+      } catch (micErr) {
+        micFailed = true
+        try {
+          const ds = await navigator.mediaDevices.getDisplayMedia(sysConstraints)
+          const sysStream = new MediaStream(ds.getAudioTracks())
+          ds.getVideoTracks().forEach(t => t.stop())
+          mediaStream = sysStream
+          warning.value = '麦克风不可用，已切换为仅录制系统音频'
+        } catch (sysErr: any) {
+          throw new Error(
+            `麦克风: ${(micErr as any)?.message || micErr}; ` +
+            `系统音频: ${sysErr?.message || sysErr}`
+          )
         }
-      })
-      const ds = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          ...({ suppressLocalAudioPlayback: false } as any),
-        } as any,
-      })
-      const sysStream = new MediaStream(ds.getAudioTracks())
-      ds.getVideoTracks().forEach(t => t.stop())
-
-      const mergeCtx = new AudioContext()
-      const dest = mergeCtx.createMediaStreamDestination()
-      mergeCtx.createMediaStreamSource(micStream).connect(dest)
-      mergeCtx.createMediaStreamSource(sysStream).connect(dest)
-      mediaStream = dest.stream
+      }
+      if (!micFailed && micStream) {
+        try {
+          const ds = await navigator.mediaDevices.getDisplayMedia(sysConstraints)
+          const sysStream = new MediaStream(ds.getAudioTracks())
+          ds.getVideoTracks().forEach(t => t.stop())
+          const ctx = new AudioContext()
+          const dest = ctx.createMediaStreamDestination()
+          ctx.createMediaStreamSource(micStream).connect(dest)
+          ctx.createMediaStreamSource(sysStream).connect(dest)
+          mergeCtx = ctx
+          mediaStream = dest.stream
+        } catch (sysErr) {
+          mediaStream = micStream
+          warning.value = '系统音频不可用，已切换为仅录制麦克风'
+        }
+      }
     } else if (hasSystem) {
-      const ds = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-          ...({ suppressLocalAudioPlayback: false } as any),
-        } as any,
-      })
+      const ds = await navigator.mediaDevices.getDisplayMedia(sysConstraints)
       mediaStream = new MediaStream(ds.getAudioTracks())
       ds.getVideoTracks().forEach(t => t.stop())
     } else {
-      mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: noiseSuppression.value,
-          noiseSuppression: noiseSuppression.value,
-          autoGainControl: noiseSuppression.value,
-        }
-      })
+      mediaStream = await navigator.mediaDevices.getUserMedia(micConstraints)
     }
   } catch (e: any) {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -322,8 +347,14 @@ export async function startRecording(router: any) {
     closeWs()
     clearTimeouts()
     state.value = 'idle'
-    const label = audioSource.value.includes('system') ? '无法捕获系统音频: ' : '无法访问麦克风: '
+    const label = audioSource.value.includes('system') ? '无法访问麦克风/系统音频: ' : '无法访问麦克风: '
     error.value = label + (e.message || e)
+    return
+  }
+
+  if (!mediaStream) {
+    state.value = 'idle'
+    error.value = '无法获取任何音频源'
     return
   }
 
@@ -345,15 +376,15 @@ export async function startRecording(router: any) {
     try {
       await setupAudioWorklet(stream)
     } catch (e) {
-      teardownAudio()
+      teardownAudioGraph()
       closeWs()
       localMode = true
     }
   }
 
   if (localMode) {
-    setupVolumeOnly(stream)
-    setupLocalRecorder(stream)
+    setupVolumeOnly(mediaStream)
+    setupLocalRecorder(mediaStream)
     liveStatus.value = 'idle'
   }
 

@@ -46,6 +46,7 @@ async def retry_transcribe(task_id: str):
 async def stream_progress(task_id: str):
     async def event_generator():
         last_status = ""
+        last_progress_sig: tuple | None = None
         while True:
             task = get_task(task_id)
             if task is None:
@@ -53,7 +54,15 @@ async def stream_progress(task_id: str):
                 break
 
             current = task.status.value
-            if current != last_status:
+            progress_sig = (
+                task.progress.current_step,
+                task.progress.overall,
+                tuple((s.name, s.status) for s in task.progress.steps),
+            )
+            status_changed = current != last_status
+            progress_changed = progress_sig != last_progress_sig
+
+            if status_changed or progress_changed:
                 task_json = task.model_dump_json()
                 if current == TaskStatus.done.value:
                     yield {"event": "done", "data": task_json}
@@ -64,8 +73,9 @@ async def stream_progress(task_id: str):
                 else:
                     yield {"event": "progress", "data": task_json}
                 last_status = current
+                last_progress_sig = progress_sig
 
-            await asyncio.sleep(1)
+            await asyncio.sleep(0.5)
 
     return EventSourceResponse(event_generator())
 

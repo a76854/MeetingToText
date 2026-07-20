@@ -2,7 +2,7 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  state, taskId, error, timer, volume, elapsedSec,
+  state, taskId, error, warning, timer, volume, elapsedSec,
   streamingAsrEnabled, liveText, liveStatus, liveError,
   formatTime, startRecording, stopRecording, cancelRecording,
   loadSettings, toggleStreamingAsr,
@@ -128,6 +128,10 @@ onMounted(async () => {
       </div>
 
       <div v-if="error" class="error-box" @click="error = ''">{{ error }}</div>
+      <div v-if="warning && state === 'recording'" class="warning-box" @click="warning = ''">
+        <span class="warning-icon">⚠</span>
+        <span>{{ warning }}</span>
+      </div>
 
       <p v-if="state === 'idle'" class="cancel-tip">
         录音中可随时点「取消」放弃本次录制，不会保存到历史任务。
@@ -397,6 +401,22 @@ h1 { font-size: 24px; margin-bottom: 8px; }
   cursor: pointer;
   max-width: 100%;
 }
+
+.warning-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fff3cd;
+  border-radius: 8px;
+  color: #856404;
+  font-size: 13px;
+  cursor: pointer;
+  max-width: 100%;
+  text-align: left;
+  line-height: 1.5;
+}
+.warning-box .warning-icon { flex-shrink: 0; font-size: 14px; }
 
 @media (max-width: 640px) {
   .page { max-width: 100%; padding: 0 4px; }

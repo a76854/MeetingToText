@@ -17,6 +17,7 @@ class StreamingASRSession:
     CHUNK_SIZE = [0, 10, 5]
     CHUNK_STRIDE_16K = CHUNK_SIZE[1] * 960  # 9600 samples
     TARGET_SR = 16000
+    RESAMPLE_OVERLAP = 256  # input samples to overlap between resamples, for boundary continuity
 
     def __init__(self, model, input_sample_rate: int):
         self.model = model
@@ -25,7 +26,7 @@ class StreamingASRSession:
         self.raw_audio = np.array([], dtype=np.float32)
         self.resampled_audio = np.array([], dtype=np.float32)
         self.partial_text = ""
-        self._processed_16k = 0
+        self._processed_input = 0
 
     def add_pcm_chunk(self, chunk: bytes) -> str:
         """Add a chunk of int16 mono PCM. Return newly recognized text (may be empty)."""
@@ -36,25 +37,26 @@ class StreamingASRSession:
             return ""
         self.raw_audio = np.concatenate([self.raw_audio, samples])
 
-        # Only resample when we have enough new audio to process at least one chunk
-        target_16k_len = int(len(self.raw_audio) * self.TARGET_SR / self.input_sr)
-        if target_16k_len - self._processed_16k < self.CHUNK_STRIDE_16K:
+        # Skip until we have at least one full 16k stride of NEW audio
+        new_input = len(self.raw_audio) - self._processed_input
+        est_new_16k = int(new_input * self.TARGET_SR / self.input_sr)
+        if est_new_16k < self.CHUNK_STRIDE_16K:
             return ""
 
-        # Resample everything we have so far
+        # Resample a small overlap with the prior region to avoid a hard cut at the seam
+        start = max(0, self._processed_input - self.RESAMPLE_OVERLAP)
+        seg = self.raw_audio[start:]
         new_resampled = librosa.resample(
-            self.raw_audio, orig_sr=self.input_sr, target_sr=self.TARGET_SR
+            seg, orig_sr=self.input_sr, target_sr=self.TARGET_SR
         )
-        # Append only the newly available portion beyond what we've already processed
-        if len(new_resampled) > self._processed_16k:
-            self.resampled_audio = np.concatenate([
-                self.resampled_audio,
-                new_resampled[self._processed_16k:],
-            ])
-        else:
-            # Resampled output is shorter than expected (rare), just use what's there
-            self.resampled_audio = new_resampled
-        self._processed_16k = len(new_resampled)
+        if self._processed_input >= self.RESAMPLE_OVERLAP:
+            overlap_out = int(self.RESAMPLE_OVERLAP * self.TARGET_SR / self.input_sr)
+            if 0 < overlap_out < len(new_resampled):
+                new_resampled = new_resampled[overlap_out:]
+
+        if len(new_resampled) > 0:
+            self.resampled_audio = np.concatenate([self.resampled_audio, new_resampled])
+        self._processed_input = len(self.raw_audio)
 
         return self._process_buffer()
 
@@ -124,10 +126,15 @@ class StreamingASR:
 
     @classmethod
     def get_instance(cls, model_name: str = "paraformer-zh-streaming", device: str = "cpu") -> "StreamingASR":
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = cls(model_name, device)
+        with cls._lock:
+            if (
+                cls._instance is None
+                or cls._instance.model_name != model_name
+                or cls._instance.device != device
+            ):
+                if cls._instance is not None:
+                    cls._instance.unload()
+                cls._instance = cls(model_name, device)
         return cls._instance
 
     def load(self):
