@@ -2,14 +2,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { api } from '../api/client'
-import ProgressIndicator from '../components/ProgressIndicator.vue'
 
 const router = useRouter()
 const uploading = ref(false)
-const processing = ref(false)
-const task = ref<any>(null)
-const progress = ref<any>(null)
-const esRef = ref<EventSource | null>(null)
 const error = ref('')
 const dragOver = ref(false)
 
@@ -30,8 +25,13 @@ async function uploadFile(file: File) {
   uploading.value = true
   try {
     const res = await api.upload(file)
-    task.value = { id: res.task_id }
-    await startProcessing()
+    let task_id = res.task_id
+    try {
+      await api.startTranscribe(task_id)
+    } catch {
+      // transcribe 失败也能看到任务详情页，可手动重试
+    }
+    router.push(`/transcript/${task_id}`)
   } catch (e: any) {
     error.value = e.message || '上传失败'
   } finally {
@@ -43,28 +43,6 @@ function onFileChange(e: Event) {
   const input = e.target as HTMLInputElement
   if (input.files?.length) uploadFile(input.files[0])
 }
-
-async function startProcessing() {
-  if (!task.value) return
-  processing.value = true
-  progress.value = null
-  try {
-    await api.startTranscribe(task.value.id)
-    esRef.value = api.streamProgress(
-      task.value.id,
-      (t) => { task.value = t; progress.value = t.progress },
-      (t) => {
-        task.value = t
-        processing.value = false
-        router.push(`/transcript/${t.id}`)
-      },
-      (e) => { error.value = e; processing.value = false },
-    )
-  } catch (e: any) {
-    error.value = e.message || '处理失败'
-    processing.value = false
-  }
-}
 </script>
 
 <template>
@@ -73,7 +51,7 @@ async function startProcessing() {
     <p class="subtitle">支持 WAV, MP3, M4A, FLAC, OGG, WebM 等格式</p>
 
     <div class="upload-area" :class="{ dragover: dragOver }" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-      <input type="file" id="fileInput" accept=".wav,.mp3,.m4a,.flac,.ogg,.webm,.opus,.aac,.wma" @change="onFileChange" :disabled="uploading || processing" />
+      <input type="file" id="fileInput" accept=".wav,.mp3,.m4a,.flac,.ogg,.webm,.opus,.aac,.wma" @change="onFileChange" :disabled="uploading" />
       <label for="fileInput" class="upload-label">
         <div class="upload-icon">+</div>
         <div>点击选择文件或拖拽文件到此处</div>
@@ -83,8 +61,6 @@ async function startProcessing() {
 
     <div v-if="uploading" class="status-box">上传中...</div>
     <div v-if="error" class="error-box">{{ error }}</div>
-
-    <ProgressIndicator v-if="processing" :progress="progress" :task="task" />
   </div>
 </template>
 

@@ -142,26 +142,17 @@ def _cleanup_orphan_files(max_age_seconds: int = 24 * 3600) -> int:
 
 
 def _preload_models() -> None:
-    """Pre-load final ASR model + streaming ASR if enabled in settings."""
-    def _load_streaming():
-        if not settings.streaming_asr_enabled:
-            return
+    """Pre-load streaming ASR model if enabled; final ASR loads on demand."""
+    if not settings.streaming_asr_enabled:
+        return
+    def _load():
         try:
             from backend.app.services.asr_streaming import StreamingASR
             StreamingASR.get_instance(settings.streaming_asr_model_name).load()
         except Exception as e:
             logger.error(f"streaming ASR preload failed: {e}")
 
-    def _load_final():
-        try:
-            from backend.app.services.asr import get_asr
-            get_asr(settings.asr_model_type, settings.asr_model_name)
-            logger.info(f"final ASR model loaded: {settings.asr_model_name}")
-        except Exception as e:
-            logger.error(f"final ASR preload failed: {e}")
-
-    threading.Thread(target=_load_streaming, daemon=True, name="preload-streaming").start()
-    threading.Thread(target=_load_final, daemon=True, name="preload-final").start()
+    threading.Thread(target=_load, daemon=True, name="preload-streaming").start()
 
 
 def main():

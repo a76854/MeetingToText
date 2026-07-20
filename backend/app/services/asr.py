@@ -80,6 +80,7 @@ class SenseVoiceASR(BaseASR):
             vad_model="fsmn-vad",
             vad_kwargs={"max_single_segment_time": 60000},
             spk_model="cam++",
+            punc_model="ct-punc",
             device=self.device,
             disable_update=True,
         )

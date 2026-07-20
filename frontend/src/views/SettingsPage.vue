@@ -1,6 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { api } from '../api/client'
+
+
+const DEFAULT_ASR_MODEL: Record<string, string> = {
+  sensevoice: 'iic/SenseVoiceSmall',
+  paraformer: 'iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch',
+}
 
 const activeTab = ref<'model' | 'record'>('model')
 
@@ -39,6 +45,11 @@ onMounted(async () => {
   } catch (e: any) {
     error.value = e.message
   }
+})
+
+watch(asrModelType, (newType) => {
+  const name = DEFAULT_ASR_MODEL[newType]
+  if (name) asrModelName.value = name
 })
 
 const audioSourceValue = computed(() => {
