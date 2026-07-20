@@ -194,6 +194,14 @@ async function retryTranscribe() {
       <div v-else class="status-box">正在处理转写，请稍候...</div>
     </div>
 
+    <div v-else-if="status === 'error'" class="error-state">
+      <div class="error-box">{{ pipelineError || '转写出错' }}</div>
+      <div class="error-actions">
+        <button class="btn-secondary" @click="retryTranscribe">重新转录</button>
+        <button class="btn-delete" @click="deleteTask">删除任务</button>
+      </div>
+    </div>
+
     <div v-if="status === 'done' && !error" class="transcript-container">
 
       <div v-for="(seg, i) in segments" :key="i" class="segment">
@@ -376,6 +384,8 @@ h1 { font-size: 24px; }
 
 .status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; }
 .error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 12px; }
+.error-state { text-align: center; padding: 48px 16px; }
+.error-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
 
 @media (max-width: 640px) {
   .page { max-width: 100%; }

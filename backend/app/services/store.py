@@ -171,6 +171,22 @@ class TaskStore:
             ).fetchall()
         return [self._row_to_task(r) for r in rows]
 
+    def mark_orphan_processing(self) -> int:
+        count = 0
+        with self._lock:
+            with self._get_conn() as conn:
+                rows = conn.execute(
+                    "SELECT id FROM tasks WHERE status = ?", (TaskStatus.processing.value,)
+                ).fetchall()
+                for row in rows:
+                    conn.execute(
+                        "UPDATE tasks SET status = ?, error = ? WHERE id = ?",
+                        (TaskStatus.error.value, "服务器重启，转录任务中断，请重新转录", row["id"]),
+                    )
+                    count += 1
+                conn.commit()
+        return count
+
     def delete(self, task_id: str):
         with self._lock:
             with self._get_conn() as conn:

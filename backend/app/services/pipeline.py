@@ -57,6 +57,7 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
         audio_data, original_sr = sf.read(audio_path, dtype="float32")
     except Exception:
         with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="PySoundFile failed")
             warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
             audio_data, original_sr = librosa.load(audio_path, sr=None, mono=True)
 

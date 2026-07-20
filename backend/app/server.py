@@ -29,6 +29,10 @@ async def _lifespan(app: FastAPI):
     if removed:
         logger.info(f"cleaned {removed} orphan file(s) from {settings.temp_dir}")
 
+    orphaned = _recover_orphan_tasks()
+    if orphaned:
+        logger.info(f"marked {orphaned} orphaned task(s) as error (server restart)")
+
     _preload_models()
     yield
 
@@ -139,6 +143,11 @@ def _cleanup_orphan_files(max_age_seconds: int = 24 * 3600) -> int:
             except OSError:
                 pass
     return removed
+
+
+def _recover_orphan_tasks() -> int:
+    from backend.app.services.store import get_store
+    return get_store().mark_orphan_processing()
 
 
 def _preload_models() -> None:
