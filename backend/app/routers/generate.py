@@ -40,13 +40,19 @@ async def generate_minutes(req: GenerateRequest):
         user_message += f"\n\n额外要求：{req.custom_instructions}"
 
     llm = get_llm()
-    minutes = await asyncio.to_thread(
-        llm.generate,
-        system_prompt=system_prompt,
-        user_message=user_message,
-        temperature=settings.llm_temperature,
-        max_tokens=settings.llm_max_tokens,
-    )
+    if not llm.api_key:
+        raise HTTPException(status_code=400, detail="请先在设置中配置 LLM API Key")
+
+    try:
+        minutes = await asyncio.to_thread(
+            llm.generate,
+            system_prompt=system_prompt,
+            user_message=user_message,
+            temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
     task.minutes = minutes
     get_store().save_minutes(req.task_id, minutes)

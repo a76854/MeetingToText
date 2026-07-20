@@ -2,18 +2,16 @@ import os
 import uuid
 import json
 import asyncio
-import shutil
 import logging
 
 logger = logging.getLogger(__name__)
-import shutil
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from backend.app.config import settings
 from backend.app.models.schemas import UploadResponse
 from backend.app.services.recorder import recorder_manager
-from backend.app.services.pipeline import create_task, get_task, run_pipeline
+from backend.app.services.pipeline import create_task, get_task, run_pipeline, pipeline_executor
 from backend.app.services.asr_streaming import StreamingASR
 
 router = APIRouter(prefix="/api", tags=["record"])
@@ -35,11 +33,11 @@ async def record_websocket(websocket: WebSocket, task_id: str):
 
     intent: str | None = None
     streaming_session = None
-    streaming_enabled = settings.streaming_asr_enabled
     audio_buffer: list[bytes] = []
     sample_rate: int = 0
     model_loading: asyncio.Task | None = None
     streaming_ready = False
+    cancelled = False
 
     async def _load_and_create_session():
         nonlocal streaming_session, streaming_ready
@@ -47,13 +45,17 @@ async def record_websocket(websocket: WebSocket, task_id: str):
             await asyncio.to_thread(
                 StreamingASR.get_instance(settings.streaming_asr_model_name).load
             )
+            if cancelled:
+                return
             session = StreamingASR.get_instance().create_session(sample_rate)
             chunks_to_feed = audio_buffer[:]
             audio_buffer.clear()
             streaming_session = session
             streaming_ready = True
             for chunk in chunks_to_feed:
-                partial = await asyncio.to_thread(session.add_pcm_chunk, chunk)
+                if cancelled:
+                    break
+                partial = session.add_pcm_chunk(chunk)
                 if partial:
                     try:
                         await websocket.send_text(json.dumps({
@@ -68,15 +70,29 @@ async def record_websocket(websocket: WebSocket, task_id: str):
             streaming_ready = True
             audio_buffer.clear()
 
+    async def _cancel_streaming():
+        nonlocal cancelled, model_loading, streaming_session, streaming_ready
+        cancelled = True
+        if model_loading and not model_loading.done():
+            model_loading.cancel()
+        model_loading = None
+        streaming_session = None
+        streaming_ready = False
+        audio_buffer.clear()
+
     try:
         while True:
             data = await websocket.receive()
             if "bytes" in data:
                 chunk = data["bytes"]
                 await recorder_manager.add_chunk(task_id, chunk)
-                if streaming_ready and streaming_session is not None:
+
+                if not settings.streaming_asr_enabled:
+                    if model_loading is not None or streaming_session is not None:
+                        await _cancel_streaming()
+                elif streaming_ready and streaming_session is not None:
                     try:
-                        partial = await asyncio.to_thread(streaming_session.add_pcm_chunk, chunk)
+                        partial = streaming_session.add_pcm_chunk(chunk)
                         if partial:
                             await websocket.send_text(json.dumps({
                                 "type": "partial",
@@ -84,7 +100,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                             }, ensure_ascii=False))
                     except Exception as e:
                         logger.warning(f"streaming ASR error: {e}")
-                elif streaming_enabled and model_loading is not None:
+                elif model_loading is not None:
                     audio_buffer.append(chunk)
             elif "text" in data:
                 msg = json.loads(data["text"])
@@ -98,13 +114,15 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                 if msg.get("type") == "config" and isinstance(msg.get("sample_rate"), int):
                     sample_rate = msg["sample_rate"]
                     await recorder_manager.set_sample_rate(task_id, sample_rate)
-                    if streaming_enabled and sample_rate > 0:
+                    if settings.streaming_asr_enabled and sample_rate > 0 and model_loading is None:
                         model_loading = asyncio.create_task(_load_and_create_session())
                         logger.info(f"streaming ASR loading in background for task={task_id}")
     except WebSocketDisconnect:
         pass
     except Exception:
         pass
+    finally:
+        await _cancel_streaming()
 
     if intent == "discard":
         await recorder_manager.cancel_recording(task_id)
@@ -133,7 +151,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     audio_path = await recorder_manager.stop_recording(task_id)
     if audio_path and os.path.exists(audio_path):
         task = create_task(filename=os.path.basename(audio_path), audio_path=audio_path)
-        asyncio.create_task(asyncio.to_thread(run_pipeline, task.id))
+        asyncio.get_running_loop().run_in_executor(pipeline_executor, run_pipeline, task.id)
         try:
             await websocket.send_text(json.dumps({"status": "done", "task_id": task.id}, ensure_ascii=False))
         except Exception:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend.app.services.pipeline import get_task, run_pipeline
+from backend.app.services.pipeline import get_task, run_pipeline, pipeline_executor
 from backend.app.services.store import get_store
 from backend.app.models.schemas import TaskStatus, TranscriptSegment
 
@@ -24,7 +24,7 @@ async def start_transcribe(task_id: str):
         raise HTTPException(status_code=404, detail="Task not found")
     if task.status == TaskStatus.processing:
         raise HTTPException(status_code=400, detail="任务正在转录中")
-    asyncio.create_task(asyncio.to_thread(run_pipeline, task_id))
+    asyncio.get_running_loop().run_in_executor(pipeline_executor, run_pipeline, task_id)
     return {"status": "started", "task_id": task_id}
 
 
@@ -38,7 +38,7 @@ async def retry_transcribe(task_id: str):
     if task.status == TaskStatus.processing:
         raise HTTPException(status_code=400, detail="任务正在转录中")
     get_store().reset_for_retry(task_id)
-    asyncio.create_task(asyncio.to_thread(run_pipeline, task_id))
+    asyncio.get_running_loop().run_in_executor(pipeline_executor, run_pipeline, task_id)
     return {"status": "restarted", "task_id": task_id}
 
 

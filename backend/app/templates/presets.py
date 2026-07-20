@@ -68,4 +68,4 @@ def get_templates() -> list[dict]:
 
 
 def get_template(template_id: str) -> dict | None:
-    return TEMPlATES.get(template_id)
+    return TEMPLATES.get(template_id)
