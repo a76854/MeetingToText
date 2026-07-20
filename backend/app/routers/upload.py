@@ -1,10 +1,11 @@
 import os
 import uuid
+import asyncio
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from backend.app.config import settings
-from backend.app.services.pipeline import create_task, run_pipeline, get_task
+from backend.app.services.pipeline import create_task, run_pipeline, pipeline_executor, get_task
 from backend.app.services.store import get_store
 from backend.app.models.schemas import UploadResponse, TaskInfo, TaskStatus
 
@@ -55,6 +56,7 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="空文件")
 
     task = create_task(filename=file.filename, audio_path=filepath)
+    asyncio.get_running_loop().run_in_executor(pipeline_executor, run_pipeline, task.id)
     return UploadResponse(task_id=task.id, filename=file.filename)
 
 

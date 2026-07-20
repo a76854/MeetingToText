@@ -102,7 +102,7 @@ onMounted(async () => {
           <button
             v-else-if="state === 'recording'"
             class="btn-record recording"
-            @click="stopRecording"
+            @click="stopRecording(router)"
           >
             <span class="btn-icon">■</span>
             <span>停止录音</span>

@@ -27,6 +27,9 @@ let timerInterval: number | null = null
 let wsTimeout: number | null = null
 let wakeLockSentinel: any = null
 let beforeUnloadHandler: ((e: BeforeUnloadEvent) => void) | null = null
+let mediaRecorder: MediaRecorder | null = null
+let recordedChunks: Blob[] = []
+let localMode = false
 
 function genTaskId(): string {
   const buf = new Uint8Array(8)
@@ -91,7 +94,7 @@ async function setupAudioWorklet(s: MediaStream) {
   mute.connect(audioCtx.destination)
 
   workletNode.port.onmessage = (e: MessageEvent) => {
-    if (ws?.readyState !== WebSocket.OPEN) return
+    if (localMode || ws?.readyState !== WebSocket.OPEN) return
     const f32 = e.data as Float32Array
     const i16 = new Int16Array(f32.length)
     for (let i = 0; i < f32.length; i++) {
@@ -101,10 +104,29 @@ async function setupAudioWorklet(s: MediaStream) {
     ws.send(i16.buffer)
   }
 
-  const dataArray = new Uint8Array(analyser.frequencyBinCount)
+  startVolumeMeter(analyser)
+}
+
+function setupVolumeOnly(s: MediaStream) {
+  audioCtx = new AudioContext()
+  const source = audioCtx.createMediaStreamSource(s)
+  analyser = audioCtx.createAnalyser()
+  analyser.fftSize = 256
+  source.connect(analyser)
+
+  const mute = audioCtx.createGain()
+  mute.gain.value = 0
+  source.connect(mute)
+  mute.connect(audioCtx.destination)
+
+  startVolumeMeter(analyser)
+}
+
+function startVolumeMeter(an: AnalyserNode) {
+  const dataArray = new Uint8Array(an.frequencyBinCount)
   function tick() {
     if (!analyser) return
-    analyser.getByteFrequencyData(dataArray)
+    an.getByteFrequencyData(dataArray)
     const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length
     volume.value = Math.min(avg / 160, 1)
     animFrame = requestAnimationFrame(tick)
@@ -112,7 +134,23 @@ async function setupAudioWorklet(s: MediaStream) {
   tick()
 }
 
+function setupLocalRecorder(s: MediaStream) {
+  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+    ? 'audio/webm;codecs=opus'
+    : 'audio/webm'
+  mediaRecorder = new MediaRecorder(s, { mimeType: mime })
+  recordedChunks = []
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data.size > 0) recordedChunks.push(e.data)
+  }
+  mediaRecorder.start(1000)
+}
+
 function teardownAudio() {
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.stop()
+  }
+  mediaRecorder = null
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null }
   if (workletNode) { workletNode.disconnect(); workletNode = null }
   if (analyser) { analyser.disconnect(); analyser = null }
@@ -137,6 +175,8 @@ function resetAll() {
   closeWs()
   teardownAudio()
   releaseWakeLock()
+  localMode = false
+  recordedChunks = []
   if (beforeUnloadHandler) {
     window.removeEventListener('beforeunload', beforeUnloadHandler)
     beforeUnloadHandler = null
@@ -176,16 +216,16 @@ function attachWsHandlers(router: any) {
   }
   ws.onclose = () => {
     if (state.value === 'recording' || state.value === 'stopping') {
-      state.value = 'idle'
-      error.value = '服务器连接断开'
-      resetAll()
+      if (!localMode && stream) {
+        localMode = true
+        setupLocalRecorder(stream)
+      }
     }
   }
   ws.onerror = () => {
-    if (state.value === 'recording') {
-      state.value = 'idle'
-      error.value = '连接出错'
-      resetAll()
+    if (state.value === 'recording' && !localMode && stream) {
+      localMode = true
+      setupLocalRecorder(stream)
     }
   }
 }
@@ -291,38 +331,37 @@ export async function startRecording(router: any) {
     if (ws && ws.readyState !== WebSocket.OPEN) {
       await openPromise
     }
-  } catch (e: any) {
-    mediaStream.getTracks().forEach(t => t.stop())
-    closeWs()
     clearTimeouts()
-    state.value = 'idle'
-    error.value = e.message === 'ws_timeout'
-      ? '连接服务器超时'
-      : '无法连接服务器，请确认后端已启动'
-    return
+    attachWsHandlers(router)
+  } catch (e: any) {
+    clearTimeouts()
+    closeWs()
+    localMode = true
   }
-
-  clearTimeouts()
 
   stream = mediaStream
 
-  try {
-    await setupAudioWorklet(stream)
-  } catch (e) {
-    teardownAudio()
-    closeWs()
-    state.value = 'idle'
-    error.value = '初始化音频管线失败'
-    return
+  if (!localMode) {
+    try {
+      await setupAudioWorklet(stream)
+    } catch (e) {
+      teardownAudio()
+      closeWs()
+      localMode = true
+    }
   }
 
-  if (audioCtx && ws) {
+  if (localMode) {
+    setupVolumeOnly(stream)
+    setupLocalRecorder(stream)
+    liveStatus.value = 'idle'
+  }
+
+  if (!localMode && audioCtx && ws) {
     try {
       ws.send(JSON.stringify({ type: 'config', sample_rate: audioCtx.sampleRate }))
     } catch {}
   }
-
-  attachWsHandlers(router)
 
   await acquireWakeLock()
 
@@ -336,7 +375,50 @@ export async function startRecording(router: any) {
   startTimer()
 }
 
-export async function stopRecording() {
+export async function stopRecording(router?: any) {
+  if (localMode) {
+    state.value = 'stopping'
+    stopTimer()
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+      mediaRecorder.requestData()
+      await new Promise(r => setTimeout(r, 300))
+    }
+    teardownAudio()
+    const blob = new Blob(recordedChunks, { type: 'audio/webm' })
+    if (blob.size > 0) {
+      try {
+        const file = new File([blob], `recording_${taskId.value}.webm`, { type: 'audio/webm' })
+        const res = await api.upload(file)
+        state.value = 'done'
+        if (router) {
+          await new Promise(r => setTimeout(r, 500))
+          router.push(`/transcript/${res.task_id}`)
+        }
+        state.value = 'idle'
+        releaseWakeLock()
+        return
+      } catch (e: any) {
+        error.value = '上传录音失败，已保存到本地下载'
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `recording_${taskId.value}.webm`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        URL.revokeObjectURL(url)
+        state.value = 'idle'
+        releaseWakeLock()
+        return
+      }
+    } else {
+      error.value = '录音内容为空'
+    }
+    releaseWakeLock()
+    state.value = 'idle'
+    return
+  }
+
   if (!ws || ws.readyState !== WebSocket.OPEN) {
     state.value = 'idle'
     error.value = '连接已断开'

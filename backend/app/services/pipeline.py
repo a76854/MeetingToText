@@ -54,8 +54,8 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
     """
     try:
         audio_data, original_sr = sf.read(audio_path, dtype="float32")
-    except Exception as e:
-        raise ValueError(f"无法读取音频文件: {e}")
+    except Exception:
+        audio_data, original_sr = librosa.load(audio_path, sr=None, mono=True)
 
     if len(audio_data.shape) == 2:
         audio_data = audio_data.mean(axis=1)
