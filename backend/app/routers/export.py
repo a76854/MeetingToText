@@ -33,13 +33,30 @@ def _export_txt(task) -> str:
 def _export_md(task) -> str:
     lines = [f"# 会议转录 — {task.filename}", ""]
     if task.result and task.result.duration:
-        m, s = divmod(int(task.result.duration), 60)
-        lines.append(f"> 时长: {m}m{s}s  |  任务ID: `{task.id}`")
+        total_s = int(task.result.duration)
+        h, total_s = divmod(total_s, 3600)
+        m, s = divmod(total_s, 60)
+        if h:
+            lines.append(f"> 时长: {h}h{m}m{s}s  |  任务ID: `{task.id}`")
+        else:
+            lines.append(f"> 时长: {m}m{s}s  |  任务ID: `{task.id}`")
         lines.append("")
     if task.result and task.result.segments:
         for i, seg in enumerate(task.result.segments, 1):
-            start = f"{int(seg.start // 60)}:{int(seg.start % 60):02d}"
-            end = f"{int(seg.end // 60)}:{int(seg.end % 60):02d}"
+            start_s = int(seg.start)
+            start_h, start_m = divmod(start_s, 3600)
+            start_m, start_s = divmod(start_m, 60)
+            end_s = int(seg.end)
+            end_h, end_m = divmod(end_s, 3600)
+            end_m, end_s = divmod(end_m, 60)
+            if start_h:
+                start = f"{start_h}:{start_m:02d}:{start_s:02d}"
+            else:
+                start = f"{start_m}:{start_s:02d}"
+            if end_h:
+                end = f"{end_h}:{end_m:02d}:{end_s:02d}"
+            else:
+                end = f"{end_m}:{end_s:02d}"
             speaker = seg.speaker or "未知"
             lines.append(f"## {i}. [{start}–{end}] {speaker}")
             lines.append("")

@@ -47,6 +47,7 @@ export interface SettingsData {
   llm_max_tokens: number
   asr_model_type: string
   asr_model_name: string
+  ncpu: number
   streaming_asr_enabled: boolean
   streaming_asr_model_name: string
   browser_noise_suppression: boolean

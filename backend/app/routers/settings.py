@@ -12,7 +12,7 @@ from backend.app.services.store import get_store
 router = APIRouter(prefix="/api", tags=["settings"])
 
 
-_INT_FIELDS = {"llm_max_tokens"}
+_INT_FIELDS = {"llm_max_tokens", "ncpu"}
 _FLOAT_FIELDS = {"llm_temperature"}
 
 
@@ -37,6 +37,7 @@ async def get_settings():
         llm_max_tokens=int(s.get_setting("llm_max_tokens", str(settings.llm_max_tokens))),
         asr_model_type=s.get_setting("asr_model_type", settings.asr_model_type),
         asr_model_name=s.get_setting("asr_model_name", settings.asr_model_name),
+        ncpu=int(s.get_setting("ncpu", str(settings.ncpu))),
         streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", "false").lower() == "true"),
         streaming_asr_model_name=s.get_setting("streaming_asr_model_name", settings.streaming_asr_model_name),
         browser_noise_suppression=(s.get_setting("browser_noise_suppression", "true").lower() != "false"),
@@ -63,6 +64,8 @@ async def update_settings(body: SettingsUpdate):
         setattr(settings, key, value)
         if key.startswith("llm_"):
             llm_touched = True
+        elif key == "ncpu":
+            asr_touched = True
         elif key.startswith("asr_"):
             asr_touched = True
         elif key.startswith("streaming_asr_"):
@@ -89,7 +92,7 @@ async def update_settings(body: SettingsUpdate):
 async def delete_setting(key: str):
     if key not in {
         "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
-        "asr_model_type", "asr_model_name",
+        "asr_model_type", "asr_model_name", "ncpu",
         "streaming_asr_enabled", "streaming_asr_model_name",
         "browser_noise_suppression", "audio_source",
     }:

@@ -1,7 +1,69 @@
+import os
 from abc import ABC, abstractmethod
 from typing import Optional
 import re
 import threading
+
+
+def _resolve_ncpu(setting: int | None) -> int:
+    max_ncpu = os.cpu_count() or 4
+    if setting is None or setting < 1:
+        return max_ncpu
+    return min(setting, max_ncpu)
+
+
+def _patch_funasr_distribute_spk() -> None:
+    try:
+        import funasr.models.campplus.utils as _utils
+    except Exception:
+        return
+    if getattr(_utils.distribute_spk, "_mt_patched", False):
+        return
+
+    def _safe_distribute_spk(sentence_list, sd_time_list):
+        cleaned = []
+        for entry in sd_time_list:
+            if not entry:
+                continue
+            st, ed, spk = entry[0], entry[1], entry[2] if len(entry) > 2 else 0
+            if st is None or ed is None:
+                continue
+            cleaned.append((float(st) * 1000.0, float(ed) * 1000.0, spk))
+
+        if not cleaned:
+            for d in sentence_list:
+                d["spk"] = 0
+            return sentence_list
+
+        for d in sentence_list:
+            sentence_start = d.get("start")
+            sentence_end = d.get("end")
+            if sentence_start is None or sentence_end is None:
+                d["spk"] = 0
+                continue
+            sentence_spk = 0
+            max_overlap = 0
+            for spk_st, spk_ed, spk in cleaned:
+                try:
+                    overlap = max(min(sentence_end, spk_ed) - max(sentence_start, spk_st), 0)
+                except TypeError:
+                    continue
+                if overlap > max_overlap:
+                    max_overlap = overlap
+                    sentence_spk = spk
+            d["spk"] = int(sentence_spk)
+        return sentence_list
+
+    _safe_distribute_spk._mt_patched = True
+    _utils.distribute_spk = _safe_distribute_spk
+    try:
+        import funasr.auto.auto_model as _am
+        _am.distribute_spk = _safe_distribute_spk
+    except Exception:
+        pass
+
+
+_patch_funasr_distribute_spk()
 
 
 def _clean_text(text: str) -> str:
@@ -24,8 +86,13 @@ def _parse_result(result: list) -> list[dict]:
             continue
         start = sent.get("start") or 0
         end = sent.get("end") or 0
+        spk = sent.get("spk", "")
+        if spk is not None and spk != "":
+            spk = f"说话人{int(spk) + 1}"
+        else:
+            spk = ""
         segments.append({
-            "speaker": sent.get("spk", ""),
+            "speaker": spk,
             "text": text,
             "start": float(start) / 1000.0,
             "end": float(end) / 1000.0,
@@ -75,6 +142,7 @@ class SenseVoiceASR(BaseASR):
 
     def load_model(self):
         from funasr import AutoModel
+        from backend.app.config import settings
         self.model = AutoModel(
             model=self.model_name,
             vad_model="fsmn-vad",
@@ -83,6 +151,7 @@ class SenseVoiceASR(BaseASR):
             punc_model="ct-punc",
             device=self.device,
             disable_update=True,
+            ncpu=_resolve_ncpu(settings.ncpu),
         )
 
     def transcribe(self, audio_path: str, language: str = "auto") -> list[dict]:
@@ -93,7 +162,7 @@ class SenseVoiceASR(BaseASR):
             cache={},
             language=language,
             use_itn=True,
-            batch_size_s=60,
+            batch_size_s=300,
             merge_vad=True,
             merge_length_s=15,
         )
@@ -111,6 +180,7 @@ class ParaformerASR(BaseASR):
 
     def load_model(self):
         from funasr import AutoModel
+        from backend.app.config import settings
         self.model = AutoModel(
             model=self.model_name,
             vad_model="fsmn-vad",
@@ -118,6 +188,7 @@ class ParaformerASR(BaseASR):
             spk_model="cam++",
             punc_model="ct-punc",
             device=self.device,
+            ncpu=_resolve_ncpu(settings.ncpu),
         )
 
     def transcribe(self, audio_path: str, language: str = "zh") -> list[dict]:
@@ -128,7 +199,7 @@ class ParaformerASR(BaseASR):
             cache={},
             language=language,
             use_itn=True,
-            batch_size_s=60,
+            batch_size_s=300,
             merge_vad=True,
             merge_length_s=15,
         )

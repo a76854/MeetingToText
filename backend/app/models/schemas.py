@@ -81,6 +81,7 @@ class SettingsUpdate(BaseModel):
     llm_max_tokens: int | None = None
     asr_model_type: str | None = None
     asr_model_name: str | None = None
+    ncpu: int | None = None
     streaming_asr_enabled: bool | None = None
     streaming_asr_model_name: str | None = None
     browser_noise_suppression: bool | None = None
@@ -95,6 +96,7 @@ class SettingsInfo(BaseModel):
     llm_max_tokens: int = 4096
     asr_model_type: str
     asr_model_name: str = "iic/SenseVoiceSmall"
+    ncpu: int = 0
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
     browser_noise_suppression: bool = True

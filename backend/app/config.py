@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
 
+    ncpu: int = 0
+
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
 

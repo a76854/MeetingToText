@@ -17,11 +17,13 @@ const llmTemperature = ref(0.3)
 const llmMaxTokens = ref(4096)
 const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
+const ncpu = ref(0)
 const streamingAsrEnabled = ref(false)
 const streamingAsrModelName = ref('paraformer-zh-streaming')
 const noiseSuppression = ref(true)
 const micEnabled = ref(true)
 const systemAudioEnabled = ref(false)
+const maxCpu = navigator.hardwareConcurrency || 16
 const apiKeySet = ref(false)
 const saved = ref(false)
 const error = ref('')
@@ -35,6 +37,7 @@ onMounted(async () => {
     llmMaxTokens.value = s.llm_max_tokens
     asrModelType.value = s.asr_model_type
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
+    ncpu.value = s.ncpu
     streamingAsrEnabled.value = s.streaming_asr_enabled
     streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
     noiseSuppression.value = s.browser_noise_suppression
@@ -71,6 +74,7 @@ async function saveSettings() {
       llm_max_tokens: llmMaxTokens.value,
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
+      ncpu: ncpu.value,
       streaming_asr_enabled: streamingAsrEnabled.value,
       streaming_asr_model_name: streamingAsrModelName.value,
       browser_noise_suppression: noiseSuppression.value,
@@ -153,6 +157,11 @@ async function clearApiKey() {
           <label class="field">
             <span>ASR 模型名 (ModelScope)</span>
             <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
+          </label>
+          <label class="field">
+            <span>CPU 线程数 (0=自动, {{ ncpu }})</span>
+            <input v-model.number="ncpu" type="range" min="0" :max="maxCpu" step="1" />
+            <span class="hint">0 表示使用全部 CPU 核心 ({{ maxCpu }}核)</span>
           </label>
         </div>
 

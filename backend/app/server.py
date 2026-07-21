@@ -96,6 +96,7 @@ _USER_SETTING_KEYS = {
     "llm_max_tokens": int,
     "asr_model_type": str,
     "asr_model_name": str,
+    "ncpu": int,
     "streaming_asr_model_name": str,
     "audio_source": str,
 }
