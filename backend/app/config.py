@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     asr_model_type: str = "sensevoice"
     asr_model_name: str = "iic/SenseVoiceSmall"
 
+    asr_batch_size_s: int = 300
+    asr_merge_length_s: float = 15.0
+    asr_merge_vad: bool = True
+
     llm_base_url: str = "https://api.deepseek.com"
     llm_api_key: str = ""
     llm_model: str = "deepseek-chat"
@@ -29,6 +33,9 @@ class Settings(BaseSettings):
     llm_max_tokens: int = 4096
 
     ncpu: int = 0
+
+    asr_batch_size_s: int = 300
+    asr_merge_length_s: float = 15.0
 
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"

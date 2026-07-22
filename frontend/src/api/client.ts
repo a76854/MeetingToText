@@ -48,6 +48,9 @@ export interface SettingsData {
   asr_model_type: string
   asr_model_name: string
   ncpu: number
+  asr_batch_size_s: number
+  asr_merge_length_s: number
+  asr_merge_vad: boolean
   streaming_asr_enabled: boolean
   streaming_asr_model_name: string
   browser_noise_suppression: boolean

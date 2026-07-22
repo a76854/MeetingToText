@@ -8,7 +8,7 @@ const DEFAULT_ASR_MODEL: Record<string, string> = {
   paraformer: 'iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch',
 }
 
-const activeTab = ref<'model' | 'record'>('model')
+const activeTab = ref<'model' | 'record' | 'tuning'>('model')
 
 const llmBaseUrl = ref('')
 const llmApiKey = ref('')
@@ -18,6 +18,9 @@ const llmMaxTokens = ref(4096)
 const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
 const ncpu = ref(0)
+const asrBatchSizeS = ref(300)
+const asrMergeLengthS = ref(15)
+const asrMergeVad = ref(true)
 const streamingAsrEnabled = ref(false)
 const streamingAsrModelName = ref('paraformer-zh-streaming')
 const noiseSuppression = ref(true)
@@ -38,6 +41,9 @@ onMounted(async () => {
     asrModelType.value = s.asr_model_type
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
     ncpu.value = s.ncpu
+    asrBatchSizeS.value = s.asr_batch_size_s
+    asrMergeLengthS.value = s.asr_merge_length_s
+    asrMergeVad.value = s.asr_merge_vad
     streamingAsrEnabled.value = s.streaming_asr_enabled
     streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
     noiseSuppression.value = s.browser_noise_suppression
@@ -75,6 +81,9 @@ async function saveSettings() {
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
       ncpu: ncpu.value,
+      asr_batch_size_s: asrBatchSizeS.value,
+      asr_merge_length_s: asrMergeLengthS.value,
+      asr_merge_vad: asrMergeVad.value,
       streaming_asr_enabled: streamingAsrEnabled.value,
       streaming_asr_model_name: streamingAsrModelName.value,
       browser_noise_suppression: noiseSuppression.value,
@@ -108,6 +117,7 @@ async function clearApiKey() {
 
     <div class="tabs">
       <button :class="['tab', { active: activeTab === 'model' }]" @click="activeTab = 'model'">模型设置</button>
+      <button :class="['tab', { active: activeTab === 'tuning' }]" @click="activeTab = 'tuning'">识别调优</button>
       <button :class="['tab', { active: activeTab === 'record' }]" @click="activeTab = 'record'">录制设置</button>
     </div>
 
@@ -158,11 +168,6 @@ async function clearApiKey() {
             <span>ASR 模型名 (ModelScope)</span>
             <input v-model="asrModelName" placeholder="iic/SenseVoiceSmall" class="input" />
           </label>
-          <label class="field">
-            <span>CPU 线程数 (0=自动, {{ ncpu }})</span>
-            <input v-model.number="ncpu" type="range" min="0" :max="maxCpu" step="1" />
-            <span class="hint">0 表示使用全部 CPU 核心 ({{ maxCpu }}核)</span>
-          </label>
         </div>
 
         <div class="section">
@@ -174,6 +179,37 @@ async function clearApiKey() {
           <label v-if="streamingAsrEnabled" class="field">
             <span>流式 ASR 模型名</span>
             <input v-model="streamingAsrModelName" placeholder="paraformer-zh-streaming" class="input" />
+          </label>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'tuning'" key="tuning" class="tab-content">
+        <div class="section">
+          <h2>计算资源</h2>
+          <label class="field">
+            <span>CPU 线程数 (0=自动, {{ ncpu }})</span>
+            <input v-model.number="ncpu" type="range" min="0" :max="maxCpu" step="1" />
+            <span class="hint">当前可用 {{ maxCpu }} 核，0 表示全部使用</span>
+          </label>
+        </div>
+
+        <div class="section">
+          <h2>识别参数</h2>
+          <div class="row-2">
+            <label class="field">
+              <span>批处理时长 (秒)</span>
+              <input v-model.number="asrBatchSizeS" type="number" min="30" max="600" step="30" class="input" />
+              <span class="hint">越大越快，占更多内存</span>
+            </label>
+            <label class="field">
+              <span>VAD 合并阈值 (秒)</span>
+              <input v-model.number="asrMergeLengthS" type="number" min="1" max="30" step="1" class="input" />
+              <span class="hint">相邻语音段多近合并</span>
+            </label>
+          </div>
+          <label class="field checkbox-field">
+            <input v-model="asrMergeVad" type="checkbox" />
+            <span>合并 VAD 相邻段 (Paraformer 建议开启)</span>
           </label>
         </div>
       </div>

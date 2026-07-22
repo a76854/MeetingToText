@@ -82,6 +82,9 @@ class SettingsUpdate(BaseModel):
     asr_model_type: str | None = None
     asr_model_name: str | None = None
     ncpu: int | None = None
+    asr_batch_size_s: int | None = None
+    asr_merge_length_s: float | None = None
+    asr_merge_vad: bool | None = None
     streaming_asr_enabled: bool | None = None
     streaming_asr_model_name: str | None = None
     browser_noise_suppression: bool | None = None
@@ -97,6 +100,9 @@ class SettingsInfo(BaseModel):
     asr_model_type: str
     asr_model_name: str = "iic/SenseVoiceSmall"
     ncpu: int = 0
+    asr_batch_size_s: int = 300
+    asr_merge_length_s: float = 15.0
+    asr_merge_vad: bool = True
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
     browser_noise_suppression: bool = True

@@ -12,8 +12,9 @@ from backend.app.services.store import get_store
 router = APIRouter(prefix="/api", tags=["settings"])
 
 
-_INT_FIELDS = {"llm_max_tokens", "ncpu"}
-_FLOAT_FIELDS = {"llm_temperature"}
+_INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s"}
+_FLOAT_FIELDS = {"llm_temperature", "asr_merge_length_s"}
+_BOOL_FIELDS = {"asr_merge_vad"}
 
 
 def _coerce(key: str, value: Any) -> Any:
@@ -23,6 +24,10 @@ def _coerce(key: str, value: Any) -> Any:
         return int(value)
     if key in _FLOAT_FIELDS:
         return float(value)
+    if key in _BOOL_FIELDS:
+        if isinstance(value, bool):
+            return value
+        return str(value).lower() == "true"
     return str(value)
 
 
@@ -38,6 +43,9 @@ async def get_settings():
         asr_model_type=s.get_setting("asr_model_type", settings.asr_model_type),
         asr_model_name=s.get_setting("asr_model_name", settings.asr_model_name),
         ncpu=int(s.get_setting("ncpu", str(settings.ncpu))),
+        asr_batch_size_s=int(s.get_setting("asr_batch_size_s", str(settings.asr_batch_size_s))),
+        asr_merge_length_s=float(s.get_setting("asr_merge_length_s", str(settings.asr_merge_length_s))),
+        asr_merge_vad=(s.get_setting("asr_merge_vad", "true").lower() == "true"),
         streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", "false").lower() == "true"),
         streaming_asr_model_name=s.get_setting("streaming_asr_model_name", settings.streaming_asr_model_name),
         browser_noise_suppression=(s.get_setting("browser_noise_suppression", "true").lower() != "false"),
@@ -64,9 +72,7 @@ async def update_settings(body: SettingsUpdate):
         setattr(settings, key, value)
         if key.startswith("llm_"):
             llm_touched = True
-        elif key == "ncpu":
-            asr_touched = True
-        elif key.startswith("asr_"):
+        elif key == "ncpu" or key.startswith("asr_"):
             asr_touched = True
         elif key.startswith("streaming_asr_"):
             streaming_asr_touched = True
@@ -93,6 +99,7 @@ async def delete_setting(key: str):
     if key not in {
         "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
         "asr_model_type", "asr_model_name", "ncpu",
+        "asr_batch_size_s", "asr_merge_length_s", "asr_merge_vad",
         "streaming_asr_enabled", "streaming_asr_model_name",
         "browser_noise_suppression", "audio_source",
     }:

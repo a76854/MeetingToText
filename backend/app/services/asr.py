@@ -75,13 +75,20 @@ def _clean_text(text: str) -> str:
 
 
 def _parse_result(result: list) -> list[dict]:
+    import logging
+    _log = logging.getLogger(__name__)
     segments = []
     if not (isinstance(result, list) and result):
         return segments
 
     item = result[0]
-    for sent in item.get("sentence_info", []):
-        text = _clean_text(sent.get("text", ""))
+    _log.info(f"_parse_result: keys={list(item.keys())} text_len={len(str(item.get('text','')))}, si_count={len(item.get('sentence_info', []))}")
+
+    for i, sent in enumerate(item.get("sentence_info", [])):
+        text = sent.get("text") or sent.get("sentence") or ""
+        text = _clean_text(text)
+        if i < 3:
+            _log.info(f"  si[{i}]: keys={list(sent.keys())} start={sent.get('start')} end={sent.get('end')} text_len={len(text)}")
         if not text:
             continue
         start = sent.get("start") or 0
@@ -103,6 +110,7 @@ def _parse_result(result: list) -> list[dict]:
         if isinstance(raw_text, str):
             raw_text = _clean_text(raw_text)
         timestamps = item.get("timestamp", [])
+        _log.info(f"_parse_result fallback: raw_text_type={type(item.get('text')).__name__} ts_len={len(timestamps) if isinstance(timestamps, list) else 'N/A'}")
         if raw_text and isinstance(timestamps, list) and timestamps:
             texts = raw_text if isinstance(raw_text, list) else [raw_text]
             for i, ts in enumerate(timestamps):
@@ -116,7 +124,7 @@ def _parse_result(result: list) -> list[dict]:
                         "start": float(ts[0] or 0) / 1000.0,
                         "end": float(ts[1] or 0) / 1000.0,
                     })
-
+    _log.info(f"_parse_result: produced {len(segments)} segments, range {segments[0]['start']:.1f}-{segments[-1]['end']:.1f}s" if segments else "_parse_result: 0 segments")
     return segments
 
 
@@ -157,14 +165,15 @@ class SenseVoiceASR(BaseASR):
     def transcribe(self, audio_path: str, language: str = "auto") -> list[dict]:
         if self.model is None:
             self.load_model()
+        from backend.app.config import settings
         result = self.model.generate(
             input=audio_path,
             cache={},
             language=language,
             use_itn=True,
-            batch_size_s=300,
-            merge_vad=True,
-            merge_length_s=15,
+            batch_size_s=settings.asr_batch_size_s,
+            merge_vad=settings.asr_merge_vad,
+            merge_length_s=settings.asr_merge_length_s,
         )
         return _parse_result(result)
 
@@ -194,14 +203,15 @@ class ParaformerASR(BaseASR):
     def transcribe(self, audio_path: str, language: str = "zh") -> list[dict]:
         if self.model is None:
             self.load_model()
+        from backend.app.config import settings
         result = self.model.generate(
             input=audio_path,
             cache={},
             language=language,
             use_itn=True,
-            batch_size_s=300,
-            merge_vad=True,
-            merge_length_s=15,
+            batch_size_s=settings.asr_batch_size_s,
+            merge_vad=settings.asr_merge_vad,
+            merge_length_s=settings.asr_merge_length_s,
         )
         return _parse_result(result)
 
