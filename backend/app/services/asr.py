@@ -151,16 +151,18 @@ class SenseVoiceASR(BaseASR):
     def load_model(self):
         from funasr import AutoModel
         from backend.app.config import settings
-        self.model = AutoModel(
+        kwargs: dict = dict(
             model=self.model_name,
             vad_model="fsmn-vad",
-            vad_kwargs={"max_single_segment_time": 60000},
+            vad_kwargs={"max_single_segment_time": settings.asr_max_single_segment_time},
             spk_model="cam++",
-            punc_model="ct-punc",
             device=self.device,
             disable_update=True,
             ncpu=_resolve_ncpu(settings.ncpu),
         )
+        if settings.asr_needs_punc:
+            kwargs["punc_model"] = "ct-punc"
+        self.model = AutoModel(**kwargs)
 
     def transcribe(self, audio_path: str, language: str = "auto") -> list[dict]:
         if self.model is None:
@@ -193,7 +195,7 @@ class ParaformerASR(BaseASR):
         self.model = AutoModel(
             model=self.model_name,
             vad_model="fsmn-vad",
-            vad_kwargs={"max_single_segment_time": 60000},
+            vad_kwargs={"max_single_segment_time": settings.asr_max_single_segment_time},
             spk_model="cam++",
             punc_model="ct-punc",
             device=self.device,

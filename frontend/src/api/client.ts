@@ -47,10 +47,12 @@ export interface SettingsData {
   llm_max_tokens: number
   asr_model_type: string
   asr_model_name: string
+  asr_needs_punc: boolean
   ncpu: number
   asr_batch_size_s: number
   asr_merge_length_s: number
   asr_merge_vad: boolean
+  asr_max_single_segment_time: number
   streaming_asr_enabled: boolean
   streaming_asr_model_name: string
   browser_noise_suppression: boolean

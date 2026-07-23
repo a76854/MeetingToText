@@ -99,11 +99,12 @@ _USER_SETTING_KEYS = {
     "ncpu": int,
     "asr_batch_size_s": int,
     "asr_merge_length_s": float,
+    "asr_max_single_segment_time": int,
     "streaming_asr_model_name": str,
     "audio_source": str,
 }
 
-_BOOL_KEYS = {"streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
+_BOOL_KEYS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
 
 
 def _load_user_settings() -> int:

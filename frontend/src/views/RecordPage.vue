@@ -24,7 +24,7 @@ onMounted(async () => {
       <div v-if="state === 'idle'" class="idle-hint">
         <div class="mic-icon">🎤</div>
         <div>点击下方按钮开始录音</div>
-        <div class="idle-sub">录制完成后将自动生成转录和会议纪要</div>
+        <div class="idle-sub">录制完成后将自动生成转录</div>
         <label class="streaming-toggle">
           <input type="checkbox" :checked="streamingAsrEnabled" @change="toggleStreamingAsr(($event.target as HTMLInputElement).checked)" />
           <span>实时转录</span>

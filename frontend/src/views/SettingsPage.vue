@@ -17,10 +17,12 @@ const llmTemperature = ref(0.3)
 const llmMaxTokens = ref(4096)
 const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
+const asrNeedsPunc = ref(false)
 const ncpu = ref(0)
 const asrBatchSizeS = ref(300)
 const asrMergeLengthS = ref(15)
 const asrMergeVad = ref(true)
+const asrMaxSingleSegmentTime = ref(60000)
 const streamingAsrEnabled = ref(false)
 const streamingAsrModelName = ref('paraformer-zh-streaming')
 const noiseSuppression = ref(true)
@@ -40,10 +42,12 @@ onMounted(async () => {
     llmMaxTokens.value = s.llm_max_tokens
     asrModelType.value = s.asr_model_type
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
+    asrNeedsPunc.value = s.asr_needs_punc
     ncpu.value = s.ncpu
     asrBatchSizeS.value = s.asr_batch_size_s
     asrMergeLengthS.value = s.asr_merge_length_s
     asrMergeVad.value = s.asr_merge_vad
+    asrMaxSingleSegmentTime.value = s.asr_max_single_segment_time
     streamingAsrEnabled.value = s.streaming_asr_enabled
     streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
     noiseSuppression.value = s.browser_noise_suppression
@@ -59,6 +63,7 @@ onMounted(async () => {
 watch(asrModelType, (newType) => {
   const name = DEFAULT_ASR_MODEL[newType]
   if (name) asrModelName.value = name
+  asrNeedsPunc.value = newType === 'paraformer'
 })
 
 const audioSourceValue = computed(() => {
@@ -80,10 +85,12 @@ async function saveSettings() {
       llm_max_tokens: llmMaxTokens.value,
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
+      asr_needs_punc: asrNeedsPunc.value,
       ncpu: ncpu.value,
       asr_batch_size_s: asrBatchSizeS.value,
       asr_merge_length_s: asrMergeLengthS.value,
       asr_merge_vad: asrMergeVad.value,
+      asr_max_single_segment_time: asrMaxSingleSegmentTime.value,
       streaming_asr_enabled: streamingAsrEnabled.value,
       streaming_asr_model_name: streamingAsrModelName.value,
       browser_noise_suppression: noiseSuppression.value,
@@ -202,15 +209,23 @@ async function clearApiKey() {
               <span class="hint">越大越快，占更多内存</span>
             </label>
             <label class="field">
+              <span>VAD 单段最大时长 (毫秒)</span>
+              <input v-model.number="asrMaxSingleSegmentTime" type="number" min="10000" max="120000" step="5000" class="input" />
+              <span class="hint">单段超时自动切分</span>
+            </label>
+
+          </div>
+          <div class="row-2">
+            <label class="field">
               <span>VAD 合并阈值 (秒)</span>
               <input v-model.number="asrMergeLengthS" type="number" min="1" max="30" step="1" class="input" />
               <span class="hint">相邻语音段多近合并</span>
             </label>
+            <label class="field checkbox-field">
+              <input v-model="asrMergeVad" type="checkbox" />
+              <span>合并 VAD 相邻段</span>
+            </label>
           </div>
-          <label class="field checkbox-field">
-            <input v-model="asrMergeVad" type="checkbox" />
-            <span>合并 VAD 相邻段 (Paraformer 建议开启)</span>
-          </label>
         </div>
       </div>
 
@@ -298,6 +313,7 @@ h2 { font-size: 16px; margin-bottom: 14px; color: #333; }
   flex-direction: row;
   align-items: flex-start;
   gap: 10px;
+  margin-top: 32px;
   cursor: pointer;
 }
 .checkbox-field input[type="checkbox"] {
