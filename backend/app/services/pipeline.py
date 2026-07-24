@@ -31,6 +31,18 @@ PIPELINE_STEPS = [
 pipeline_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline")
 
 _pipeline_futures: dict[str, Future] = {}
+_cancelled: set[str] = set()
+
+
+def _check_cancelled(task_id: str) -> bool:
+    if task_id in _cancelled:
+        logger.info(f"pipeline for task={task_id} was cancelled, aborting")
+        return True
+    return False
+
+
+def _cleanup_cancelled(task_id: str) -> None:
+    _cancelled.discard(task_id)
 
 
 def submit_pipeline(task_id: str) -> Future:
@@ -41,6 +53,7 @@ def submit_pipeline(task_id: str) -> Future:
 
 
 def cancel_pipeline(task_id: str) -> bool:
+    _cancelled.add(task_id)
     fut = _pipeline_futures.pop(task_id, None)
     if fut is not None and not fut.done():
         cancelled = fut.cancel()
@@ -99,6 +112,9 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
 
 
 def run_pipeline(task_id: str):
+    if _check_cancelled(task_id):
+        return
+
     store = get_store()
     task = store.get(task_id)
     if task is None:
@@ -163,6 +179,9 @@ def run_pipeline(task_id: str):
         update_step("vad", "running", "正在分段...", overall=0.3)
         update_step("asr", "running", "加载模型并识别...", overall=0.35)
 
+        if _check_cancelled(task_id):
+            return
+
         asr_engine = get_asr(settings.asr_model_type, settings.asr_model_name)
         segments_raw = asr_engine.transcribe(asr_input, language="auto")
         logger.info(f"ASR returned {len(segments_raw)} segments for task={task_id}")
@@ -209,6 +228,7 @@ def run_pipeline(task_id: str):
         logger.error(f"task={task_id} failed: {e}")
         store.update_progress(task_id, TaskStatus.error, str(e))
     finally:
+        _cleanup_cancelled(task_id)
         if asr_temp_path and os.path.exists(asr_temp_path):
             try:
                 os.remove(asr_temp_path)
