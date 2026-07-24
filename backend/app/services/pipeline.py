@@ -3,7 +3,7 @@ import time
 import warnings
 import tempfile
 import logging
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, Future
 import numpy as np
 import soundfile as sf
 import librosa
@@ -29,6 +29,25 @@ PIPELINE_STEPS = [
 ]
 
 pipeline_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline")
+
+_pipeline_futures: dict[str, Future] = {}
+
+
+def submit_pipeline(task_id: str) -> Future:
+    fut = pipeline_executor.submit(run_pipeline, task_id)
+    _pipeline_futures[task_id] = fut
+    fut.add_done_callback(lambda _: _pipeline_futures.pop(task_id, None))
+    return fut
+
+
+def cancel_pipeline(task_id: str) -> bool:
+    fut = _pipeline_futures.pop(task_id, None)
+    if fut is not None and not fut.done():
+        cancelled = fut.cancel()
+        if cancelled:
+            logger.info(f"cancelled pipeline for task={task_id}")
+        return cancelled
+    return False
 
 
 def _initial_progress() -> ProgressInfo:

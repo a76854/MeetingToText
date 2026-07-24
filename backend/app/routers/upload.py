@@ -5,7 +5,7 @@ import asyncio
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from backend.app.config import settings
-from backend.app.services.pipeline import create_task, get_task
+from backend.app.services.pipeline import create_task, get_task, cancel_pipeline
 from backend.app.services.store import get_store
 from backend.app.models.schemas import UploadResponse, TaskInfo, TaskStatus
 
@@ -92,6 +92,7 @@ async def delete_task(task_id: str):
     task = get_task(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
+    cancel_pipeline(task_id)
     try:
         if task.audio_path and os.path.exists(task.audio_path):
             os.remove(task.audio_path)
