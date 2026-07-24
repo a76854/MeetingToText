@@ -51,7 +51,7 @@ function onFileChange(e: Event) {
     <p class="subtitle">支持 WAV, MP3, M4A, FLAC, OGG, WebM 等格式</p>
 
     <div class="upload-area" :class="{ dragover: dragOver }" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop">
-      <input type="file" id="fileInput" accept=".wav,.mp3,.m4a,.flac,.ogg,.webm,.opus,.aac,.wma" @change="onFileChange" :disabled="uploading" />
+      <input type="file" id="fileInput" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm,.opus,.aac,.wma" @change="onFileChange" :disabled="uploading" />
       <label for="fileInput" class="upload-label">
         <div class="upload-icon">+</div>
         <div>点击选择文件或拖拽文件到此处</div>
