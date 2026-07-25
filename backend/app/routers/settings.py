@@ -12,9 +12,9 @@ from backend.app.services.store import get_store
 router = APIRouter(prefix="/api", tags=["settings"])
 
 
-_INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
+_INT_FIELDS = {"llm_max_tokens", "llm_max_input_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
 _FLOAT_FIELDS = {"llm_temperature", "asr_merge_length_s"}
-_BOOL_FIELDS = {"asr_merge_vad", "asr_needs_punc"}
+_BOOL_FIELDS = {"asr_merge_vad", "asr_needs_punc", "auto_generate_minutes"}
 
 
 def _coerce(key: str, value: Any) -> Any:
@@ -40,6 +40,8 @@ async def get_settings():
         llm_api_key_set=bool(s.get_setting("llm_api_key", "")),
         llm_temperature=float(s.get_setting("llm_temperature", str(settings.llm_temperature))),
         llm_max_tokens=int(s.get_setting("llm_max_tokens", str(settings.llm_max_tokens))),
+        llm_max_input_tokens=int(s.get_setting("llm_max_input_tokens", str(settings.llm_max_input_tokens))),
+        auto_generate_minutes=(s.get_setting("auto_generate_minutes", "false").lower() == "true"),
         asr_model_type=s.get_setting("asr_model_type", settings.asr_model_type),
         asr_model_name=s.get_setting("asr_model_name", settings.asr_model_name),
         asr_needs_punc=(s.get_setting("asr_needs_punc", str(settings.asr_needs_punc)).lower() == "true"),
@@ -107,7 +109,7 @@ async def update_settings(body: SettingsUpdate):
 @router.delete("/settings/{key}")
 async def delete_setting(key: str):
     if key not in {
-        "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
+        "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens", "llm_max_input_tokens", "auto_generate_minutes",
         "asr_model_type", "asr_model_name", "asr_needs_punc", "ncpu",
         "asr_batch_size_s", "asr_merge_length_s", "asr_merge_vad", "asr_max_single_segment_time",
         "streaming_asr_enabled", "streaming_asr_model_name",
