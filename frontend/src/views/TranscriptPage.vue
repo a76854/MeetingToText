@@ -1,11 +1,26 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NTag,
+  NSpin,
+  NAlert,
+  NEmpty,
+  NSlider,
+  NDivider,
+  useDialog,
+  useMessage,
+} from 'naive-ui'
 import { api } from '../api/client'
 import ProgressIndicator from '../components/ProgressIndicator.vue'
 
 const route = useRoute()
 const router = useRouter()
+const dialog = useDialog()
+const message = useMessage()
 
 const taskId = route.params.taskId as string
 const loading = ref(true)
@@ -22,6 +37,12 @@ const audioDuration = ref(0)
 let audioEventsAttached = false
 
 let es: EventSource | null = null
+
+const exportFormatOptions = [
+  { label: 'TXT', value: 'txt' },
+  { label: 'SRT 字幕', value: 'srt' },
+  { label: 'Markdown', value: 'md' },
+]
 
 onMounted(async () => {
   await loadTask()
@@ -85,18 +106,30 @@ function goToGenerate() {
   router.push(`/generate/${taskId}`)
 }
 
+function goToMinutes() {
+  router.push(`/minutes/${taskId}`)
+}
+
 function goToEdit() {
   router.push(`/edit/${taskId}`)
 }
 
-async function deleteTask() {
-  if (!confirm('确认删除此任务？音频和转录将一并清除，不可恢复。')) return
-  try {
-    await api.deleteTask(taskId)
-    router.push('/tasks')
-  } catch (e: any) {
-    error.value = e.message || '删除失败'
-  }
+function deleteTask() {
+  dialog.warning({
+    title: '确认删除',
+    content: '此任务的音频和转录将一并清除，不可恢复。',
+    positiveText: '删除',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await api.deleteTask(taskId)
+        message.success('已删除')
+        router.push('/tasks')
+      } catch (e: any) {
+        message.error(e.message || '删除失败')
+      }
+    },
+  })
 }
 
 function exportAs(format: string) {
@@ -141,264 +174,146 @@ function initAudioEvents() {
   audioEventsAttached = true
 }
 
-function onSeekInput(e: Event) {
-  audioCurrentTime.value = parseFloat((e.target as HTMLInputElement).value)
-}
-
-function onSeekChange(e: Event) {
-  const val = parseFloat((e.target as HTMLInputElement).value)
+function onSeekChange(value: number) {
   const audio = document.getElementById('transcript-audio') as HTMLAudioElement | null
   if (!audio) return
   initAudioEvents()
-  audio.currentTime = val
-  audioCurrentTime.value = val
+  audio.currentTime = value
 }
 
-async function retryTranscribe() {
-  if (!confirm('重新转录？当前转录结果将被覆盖。')) return
-  try {
-    await api.retryTranscribe(taskId)
-    status.value = 'pending'
-    segments.value = []
-    fullText.value = ''
-    progress.value = null
-    subscribeProgress()
-  } catch (e: any) {
-    error.value = e.message || '重新转录失败'
-  }
+function retryTranscribe() {
+  dialog.warning({
+    title: '重新转录',
+    content: '当前转录结果将被覆盖。',
+    positiveText: '确认重转',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      try {
+        await api.retryTranscribe(taskId)
+        status.value = 'pending'
+        segments.value = []
+        fullText.value = ''
+        progress.value = null
+        subscribeProgress()
+        message.success('已开始重新转录')
+      } catch (e: any) {
+        message.error(e.message || '重新转录失败')
+      }
+    },
+  })
 }
 </script>
 
 <template>
-  <div class="page">
-    <div class="header">
-      <h1>转录结果</h1>
-      <div class="header-actions">
-        <span v-if="status === 'processing'" class="status-badge processing">转写中...</span>
-        <template v-if="status === 'done'">
-          <div class="audio-controls">
-            <button class="btn-secondary btn-play" @click="togglePlay">{{ playingId ? '暂停' : '播放' }}</button>
-            <div class="seek-row">
-              <span class="seek-time">{{ formatTime(audioCurrentTime) }}</span>
-              <input type="range" class="seek-slider" min="0" :max="audioDuration || 0" step="0.1" :value="audioCurrentTime" @input="onSeekInput" @change="onSeekChange" />
-              <span class="seek-time">{{ formatTime(audioDuration) }}</span>
+  <div>
+    <NSpace align="center" justify="space-between" style="margin-bottom: 16px; flex-wrap: wrap;" :wrap-item="false">
+      <h1 style="font-size: 24px; margin: 0;">转录结果</h1>
+      <NSpace align="center" v-if="status === 'processing'">
+        <NTag type="warning" round>转写中...</NTag>
+      </NSpace>
+    </NSpace>
+
+    <NCard v-if="status === 'done'" style="margin-bottom: 16px;">
+      <NSpace vertical :size="16">
+        <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 16px; flex: 1; min-width: 300px;">
+            <NButton @click="togglePlay" type="primary" ghost>
+              {{ playingId ? '暂停' : '播放' }}
+            </NButton>
+            <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 120px;">
+              <span style="font-size: 12px; color: #666; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right;">
+                {{ formatTime(audioCurrentTime) }}
+              </span>
+              <NSlider
+                :value="audioCurrentTime"
+                :min="0"
+                :max="audioDuration || 0"
+                :step="0.1"
+                :tooltip="false"
+                style="flex: 1;"
+                @update:value="onSeekChange"
+              />
+              <span style="font-size: 12px; color: #666; font-variant-numeric: tabular-nums; min-width: 40px;">
+                {{ formatTime(audioDuration) }}
+              </span>
             </div>
           </div>
-          <button class="btn-secondary" @click="retryTranscribe">重转</button>
-          <button class="btn-secondary" @click="goToEdit">编辑</button>
-        </template>
-      </div>
-    </div>
-
-    <div v-if="loading" class="status-box">加载中...</div>
-    <div v-if="error" class="error-box">{{ error }}</div>
-
-    <div v-if="status === 'processing' || status === 'pending'" class="processing-area">
-      <ProgressIndicator v-if="progress" :progress="progress" :task="{ status }" />
-      <div v-else class="status-box">正在处理转写，请稍候...</div>
-    </div>
-
-    <div v-else-if="status === 'error'" class="error-state">
-      <div class="error-box">{{ pipelineError || '转写出错' }}</div>
-      <div class="error-actions">
-        <button class="btn-secondary" @click="retryTranscribe">重新转录</button>
-        <button class="btn-delete" @click="deleteTask">删除任务</button>
-      </div>
-    </div>
-
-    <div v-if="status === 'done' && !error" class="transcript-container">
-
-      <div v-for="(seg, i) in segments" :key="i" class="segment">
-          <div class="seg-meta">
-            <span class="seg-speaker" :class="{ noSpeaker: !seg.speaker }">{{ seg.speaker || '未知说话人' }}</span>
-            <span class="seg-time">{{ formatTime(seg.start) }} - {{ formatTime(seg.end) }}</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <NButton @click="retryTranscribe" secondary>重转</NButton>
+            <NButton @click="goToEdit" secondary>编辑</NButton>
           </div>
-          <div class="seg-text">{{ seg.text }}</div>
         </div>
+        <NDivider style="margin: 0;" />
+        <NSpace align="center" justify="space-between" wrap>
+          <NSpace align="center">
+            <span style="font-size: 13px; color: #888;">导出：</span>
+            <NButton size="small" @click="exportAs('txt')">TXT</NButton>
+            <NButton size="small" @click="exportAs('srt')">SRT 字幕</NButton>
+            <NButton size="small" @click="exportAs('md')">Markdown</NButton>
+          </NSpace>
+          <NSpace>
+            <NButton @click="goToMinutes" ghost>查看纪要</NButton>
+            <NButton @click="goToGenerate" type="primary">生成纪要</NButton>
+            <NButton @click="deleteTask" type="error" ghost>删除任务</NButton>
+          </NSpace>
+        </NSpace>
+      </NSpace>
+    </NCard>
 
-        <div v-if="!segments.length && fullText" class="full-text">
-          <pre>{{ fullText }}</pre>
-        </div>
+    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
 
-        <div v-if="!segments.length && !fullText" class="empty-hint">
-          <div v-if="pipelineError" class="empty-detail">{{ pipelineError }}</div>
-          <div v-else>转录完成，但未能识别到语音内容。请检查麦克风是否正常工作后重新录制。</div>
-        </div>
-
-      <div v-if="status === 'done' && (segments.length || fullText)" class="footer-actions">
-        <div class="export-group">
-          <span class="footer-label">导出：</span>
-          <button class="btn-export" @click="exportAs('txt')">TXT</button>
-          <button class="btn-export" @click="exportAs('srt')">SRT 字幕</button>
-          <button class="btn-export" @click="exportAs('md')">Markdown</button>
-        </div>
-        <div class="footer-right">
-          <button class="btn-secondary" @click="goToGenerate">生成纪要</button>
-          <button class="btn-delete" @click="deleteTask">删除任务</button>
-        </div>
-        <audio id="transcript-audio" :src="api.audioUrl(taskId)"></audio>
-      </div>
+    <div v-if="status === 'processing' || status === 'pending'">
+      <NCard>
+        <ProgressIndicator v-if="progress" :progress="progress" :task="{ status }" />
+        <NSpin v-else>
+          <div style="text-align: center; padding: 24px;">正在处理转写，请稍候...</div>
+        </NSpin>
+      </NCard>
     </div>
+
+    <NCard v-else-if="status === 'error'" style="text-align: center;">
+      <NEmpty :description="pipelineError || '转写出错'">
+        <template #extra>
+          <NSpace>
+            <NButton @click="retryTranscribe" type="primary">重新转录</NButton>
+            <NButton @click="deleteTask" type="error" ghost>删除任务</NButton>
+          </NSpace>
+        </template>
+      </NEmpty>
+    </NCard>
+
+    <template v-else-if="status === 'done'">
+      <NCard>
+        <template v-if="segments.length">
+          <NSpace vertical :size="10">
+            <NCard
+              v-for="(seg, i) in segments"
+              :key="i"
+              size="small"
+              hoverable
+            >
+              <NSpace align="center" justify="space-between" style="margin-bottom: 6px;">
+                <NTag :type="seg.speaker ? 'info' : 'default'" size="small" round>
+                  {{ seg.speaker || '未知说话人' }}
+                </NTag>
+                <span style="font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums;">
+                  {{ formatTime(seg.start) }} - {{ formatTime(seg.end) }}
+                </span>
+              </NSpace>
+              <div style="font-size: 15px; line-height: 1.6;">{{ seg.text }}</div>
+            </NCard>
+          </NSpace>
+        </template>
+        <pre v-else-if="fullText" style="white-space: pre-wrap; font-family: inherit; font-size: 15px; line-height: 1.8; margin: 0;">{{ fullText }}</pre>
+        <NEmpty
+          v-else
+          :description="pipelineError || '转录完成，但未能识别到语音内容。请检查麦克风是否正常工作后重新录制。'"
+        />
+      </NCard>
+
+
+
+      <audio id="transcript-audio" :src="api.audioUrl(taskId)" style="display: none;"></audio>
+    </template>
   </div>
 </template>
-
-<style scoped>
-.page { max-width: 760px; margin: 0 auto; }
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-h1 { font-size: 24px; }
-
-.header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-
-.audio-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.btn-play { min-width: 52px; }
-.seek-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.seek-time {
-  font-size: 12px;
-  color: #666;
-  font-variant-numeric: tabular-nums;
-  min-width: 36px;
-}
-.seek-slider {
-  width: 120px;
-  height: 4px;
-  cursor: pointer;
-  accent-color: #1a73e8;
-}
-
-.status-badge {
-  font-size: 13px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-weight: 500;
-}
-.status-badge.processing { background: #fff3cd; color: #856404; }
-
-.btn-primary, .btn-secondary, .btn-export, .btn-delete {
-  font-family: inherit;
-  cursor: pointer;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  transition: all 0.15s;
-}
-.btn-primary {
-  padding: 8px 16px;
-  background: #1a73e8;
-  color: white;
-  border-color: #1a73e8;
-  font-size: 13px;
-}
-.btn-primary:hover:not(:disabled) { background: #1557b0; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-secondary {
-  padding: 8px 14px;
-  background: white;
-  color: #1a73e8;
-  border-color: #1a73e8;
-  font-size: 13px;
-}
-.btn-secondary:hover { background: #f0f6ff; }
-
-.btn-export {
-  padding: 6px 10px;
-  background: white;
-  color: #444;
-  border-color: #ddd;
-  font-size: 12px;
-}
-.btn-export:hover { border-color: #1a73e8; color: #1a73e8; }
-
-.btn-delete {
-  padding: 6px 12px;
-  background: white;
-  color: #d93025;
-  border-color: #f4c2c0;
-  font-size: 12px;
-}
-.btn-delete:hover { background: #fce8e6; border-color: #d93025; }
-
-.duration { color: #888; font-size: 13px; margin-bottom: 20px; }
-
-.segment {
-  padding: 12px 16px;
-  background: white;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.seg-meta {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.seg-speaker {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1a73e8;
-  background: #e8f0fe;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-.seg-speaker.noSpeaker { color: #999; background: #f0f0f0; }
-.seg-time { font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums; }
-.seg-text { font-size: 15px; line-height: 1.6; }
-
-.full-text pre {
-  white-space: pre-wrap;
-  font-family: inherit;
-  font-size: 15px;
-  line-height: 1.8;
-  background: white;
-  padding: 20px;
-  border-radius: 8px;
-}
-
-.empty-hint { color: #888; text-align: center; padding: 32px; }
-.empty-detail { color: #d93025; margin-top: 12px; font-size: 13px; white-space: pre-wrap; }
-
-.footer-actions {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.export-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.footer-label { font-size: 12px; color: #888; margin-right: 4px; }
-.footer-right { display: flex; align-items: center; gap: 8px; }
-
-.status-box { padding: 12px; background: #e8f0fe; border-radius: 8px; color: #1a73e8; }
-.error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 12px; }
-.error-state { text-align: center; padding: 48px 16px; }
-.error-actions { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
-
-@media (max-width: 640px) {
-  .page { max-width: 100%; }
-  .header { flex-direction: column; align-items: stretch; }
-  h1 { font-size: 20px; }
-  .header-actions { justify-content: flex-end; }
-  .audio-controls { flex-wrap: wrap; }
-  .seek-slider { width: 80px; }
-  .footer-actions { flex-direction: column; align-items: stretch; }
-  .export-group { justify-content: flex-start; }
-}
-</style>

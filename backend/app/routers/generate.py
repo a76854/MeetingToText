@@ -1,6 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from backend.app.config import settings
 from backend.app.models.schemas import GenerateRequest, GenerateResponse
@@ -8,6 +9,10 @@ from backend.app.services.pipeline import get_task
 from backend.app.services.llm import get_llm
 from backend.app.services.store import get_store
 from backend.app.templates.presets import get_template, get_templates
+
+
+class UpdateMinutesRequest(BaseModel):
+    minutes: str
 
 router = APIRouter(prefix="/api", tags=["generate"])
 
@@ -57,3 +62,13 @@ async def generate_minutes(req: GenerateRequest):
     task.minutes = minutes
     get_store().save_minutes(req.task_id, minutes)
     return GenerateResponse(minutes=minutes)
+
+
+@router.put("/minutes/{task_id}", response_model=GenerateResponse)
+async def update_minutes(task_id: str, body: UpdateMinutesRequest):
+    task = get_task(task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    get_store().save_minutes(task_id, body.minutes)
+    task.minutes = body.minutes
+    return GenerateResponse(minutes=body.minutes)

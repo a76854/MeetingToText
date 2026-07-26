@@ -3,19 +3,32 @@ import { useRoute } from 'vue-router'
 import { computed } from 'vue'
 
 const route = useRoute()
-const isActive = (name: string) => computed(() => route.name === name ? 'active' : '')
+
+const navItems = [
+  { name: 'record', label: '实时录音', to: '/record' },
+  { name: 'upload', label: '上传文件', to: '/upload' },
+  { name: 'tasks', label: '历史任务', to: '/tasks' },
+  { name: 'settings', label: '设置', to: '/settings' },
+] as const
+
+const activeName = computed(() => route.name as string)
 </script>
 
 <template>
-  <nav class="navbar">
+  <header class="navbar">
     <div class="nav-brand">MeetingToText</div>
-    <div class="nav-links">
-      <RouterLink to="/record" :class="isActive('record').value">实时录音</RouterLink>
-      <RouterLink to="/upload" :class="isActive('upload').value">上传文件</RouterLink>
-      <RouterLink to="/tasks" :class="isActive('tasks').value">历史任务</RouterLink>
-      <RouterLink to="/settings" :class="isActive('settings').value">设置</RouterLink>
-    </div>
-  </nav>
+    <nav class="nav-links">
+      <RouterLink
+        v-for="item in navItems"
+        :key="item.name"
+        :to="item.to"
+        class="nav-link"
+        :class="{ active: activeName === item.name }"
+      >
+        {{ item.label }}
+      </RouterLink>
+    </nav>
+  </header>
 </template>
 
 <style scoped>
@@ -39,7 +52,7 @@ const isActive = (name: string) => computed(() => route.name === name ? 'active'
   gap: 24px;
 }
 
-.nav-links a {
+.nav-link {
   text-decoration: none;
   color: #666;
   font-size: 14px;
@@ -48,8 +61,8 @@ const isActive = (name: string) => computed(() => route.name === name ? 'active'
   transition: all 0.2s;
 }
 
-.nav-links a:hover,
-.nav-links a.active {
+.nav-link:hover,
+.nav-link.active {
   color: #1a73e8;
   border-bottom-color: #1a73e8;
 }
@@ -58,6 +71,6 @@ const isActive = (name: string) => computed(() => route.name === name ? 'active'
   .navbar { padding: 12px 0; flex-wrap: wrap; gap: 8px; }
   .nav-brand { font-size: 16px; }
   .nav-links { gap: 14px; flex-wrap: wrap; }
-  .nav-links a { font-size: 13px; padding: 4px 0; }
+  .nav-link { font-size: 13px; padding: 4px 0; }
 }
 </style>

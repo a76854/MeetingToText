@@ -2,10 +2,23 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { marked } from 'marked'
+import {
+  NCard,
+  NButton,
+  NSpace,
+  NInput,
+  NRadioGroup,
+  NRadio,
+  NAlert,
+  NSpin,
+  NTag,
+  useMessage,
+} from 'naive-ui'
 import { api } from '../api/client'
 
 const route = useRoute()
 const taskId = route.params.taskId as string
+const message = useMessage()
 
 const templates = ref<any[]>([])
 const selectedTemplate = ref('meeting_minutes')
@@ -18,21 +31,31 @@ marked.setOptions({ breaks: true, gfm: true })
 
 onMounted(async () => {
   try {
-    const res = await api.getTemplates()
-    templates.value = res.templates
+    const [tplRes, taskRes] = await Promise.all([
+      api.getTemplates(),
+      api.getTask(taskId),
+    ])
+    templates.value = tplRes.templates
+    if (taskRes.minutes) {
+      minutes.value = taskRes.minutes
+    }
   } catch (e: any) {
     error.value = e.message
   }
 })
 
-async function doGenerate() {
+async function doGenerate(force = false) {
   generating.value = true
   error.value = ''
   try {
-    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value)
+    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value, force)
     minutes.value = res.minutes
+    if (force) {
+      message.success('已重新生成')
+    }
   } catch (e: any) {
     error.value = e.message || '生成失败'
+    message.error(error.value)
   } finally {
     generating.value = false
   }
@@ -42,6 +65,7 @@ const minutesHtml = computed(() => minutes.value ? marked.parse(minutes.value) a
 
 function copyToClipboard() {
   navigator.clipboard.writeText(minutes.value)
+  message.success('已复制到剪贴板')
 }
 
 function downloadMarkdown() {
@@ -59,124 +83,72 @@ function downloadMarkdown() {
 </script>
 
 <template>
-  <div class="page">
-    <h1>生成会议纪要</h1>
+  <div>
+    <h1 style="font-size: 24px; margin-bottom: 24px;">生成会议纪要</h1>
 
-    <div class="form-section">
-      <label class="field-label">选择模板</label>
-      <div class="template-list">
-        <div
-          v-for="t in templates" :key="t.id"
-          class="template-card"
-          :class="{ selected: selectedTemplate === t.id }"
-          @click="selectedTemplate = t.id"
-        >
-          <div class="t-name">{{ t.name }}</div>
-          <div class="t-desc">{{ t.description }}</div>
-        </div>
-      </div>
-    </div>
+    <NCard title="选择模板" style="margin-bottom: 16px;">
+      <NRadioGroup v-model:value="selectedTemplate">
+        <NSpace vertical :size="10" style="width: 100%;">
+          <NRadio
+            v-for="t in templates"
+            :key="t.id"
+            :value="t.id"
+            style="width: 100%; align-items: flex-start;"
+          >
+            <div>
+              <div style="font-weight: 600; font-size: 14px;">{{ t.name }}</div>
+              <div style="font-size: 12px; color: #888;">{{ t.description }}</div>
+            </div>
+          </NRadio>
+        </NSpace>
+      </NRadioGroup>
+    </NCard>
 
-    <div class="form-section">
-      <label class="field-label" for="customInstr">额外要求（选填）</label>
-      <textarea id="customInstr" v-model="customInstructions" placeholder="例如：使用英文输出、重点提取技术讨论内容..." rows="3" class="input-field" />
-    </div>
+    <NCard title="额外要求（选填）" style="margin-bottom: 16px;">
+      <NInput
+        v-model:value="customInstructions"
+        type="textarea"
+        :autosize="{ minRows: 2, maxRows: 5 }"
+        placeholder="例如：使用英文输出、重点提取技术讨论内容..."
+      />
+    </NCard>
 
-    <button class="btn-generate" @click="doGenerate" :disabled="generating">
-      {{ generating ? '生成中...' : '生成会议纪要' }}
-    </button>
+    <NSpace style="margin-bottom: 16px;">
+      <NButton
+        type="primary"
+        size="large"
+        :loading="generating"
+        @click="doGenerate(false)"
+        style="flex: 1;"
+      >
+        {{ generating ? '生成中...' : (minutes ? '使用缓存' : '生成会议纪要') }}
+      </NButton>
+      <NButton
+        v-if="minutes"
+        size="large"
+        :loading="generating"
+        @click="doGenerate(true)"
+        ghost
+      >
+        重新生成
+      </NButton>
+    </NSpace>
 
-    <div v-if="error" class="error-box">{{ error }}</div>
+    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
 
-    <div v-if="minutes" class="minutes-output">
-      <div class="minutes-header">
-        <span>生成结果</span>
-        <div class="minutes-actions">
-          <button class="btn-mini" @click="downloadMarkdown" title="下载 Markdown（包含转录）">下载 .md</button>
-          <button class="btn-mini" @click="copyToClipboard">复制</button>
-        </div>
-      </div>
+    <NCard v-if="minutes" title="生成结果">
+      <template #header-extra>
+        <NSpace>
+          <NButton size="small" @click="downloadMarkdown" ghost>下载 .md</NButton>
+          <NButton size="small" @click="copyToClipboard" ghost>复制</NButton>
+        </NSpace>
+      </template>
       <div class="minutes-content" v-html="minutesHtml" />
-    </div>
+    </NCard>
   </div>
 </template>
 
 <style scoped>
-.page { max-width: 700px; margin: 0 auto; }
-h1 { font-size: 24px; margin-bottom: 24px; }
-
-.form-section { margin-bottom: 20px; }
-.field-label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 10px; color: #444; }
-
-.template-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 640px) {
-  .template-list { grid-template-columns: 1fr; }
-}
-.template-card {
-  padding: 14px;
-  border: 2px solid #e0e0e0;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  background: white;
-}
-.template-card:hover { border-color: #1a73e8; }
-.template-card.selected { border-color: #1a73e8; background: #f0f6ff; }
-.t-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-.t-desc { font-size: 12px; color: #888; }
-
-.input-field {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  font-size: 14px;
-  font-family: inherit;
-  resize: vertical;
-}
-.input-field:focus { outline: none; border-color: #1a73e8; }
-
-.btn-generate {
-  width: 100%;
-  padding: 14px;
-  background: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 16px;
-  cursor: pointer;
-  margin-bottom: 16px;
-}
-.btn-generate:hover { background: #1557b0; }
-.btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.minutes-output {
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-}
-.minutes-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #eee;
-  font-weight: 600;
-}
-.minutes-actions { display: flex; gap: 8px; }
-.btn-mini {
-  padding: 6px 12px;
-  background: #f0f0f0;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  color: #444;
-}
-.btn-mini:hover { background: #e0e0e0; }
-
 .minutes-content {
   font-size: 15px;
   line-height: 1.8;
@@ -197,13 +169,4 @@ h1 { font-size: 24px; margin-bottom: 24px; }
 .minutes-content :deep(th),
 .minutes-content :deep(td) { border: 1px solid #ddd; padding: 6px 10px; }
 .minutes-content :deep(th) { background: #f7f7f7; }
-
-.error-box { padding: 12px; background: #fce8e6; border-radius: 8px; color: #d93025; margin-bottom: 16px; }
-
-@media (max-width: 640px) {
-  .page { max-width: 100%; }
-  h1 { font-size: 20px; }
-  .minutes-output { padding: 16px; }
-  .minutes-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-}
 </style>

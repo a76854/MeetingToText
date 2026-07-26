@@ -39,6 +39,11 @@ const router = createRouter({
       name: 'edit',
       component: () => import('../views/EditPage.vue'),
     },
+    {
+      path: '/minutes/:taskId',
+      name: 'minutes',
+      component: () => import('../views/MinutesPage.vue'),
+    },
   ],
 })
 
