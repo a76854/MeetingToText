@@ -97,10 +97,6 @@ function confirmEdit() {
   })
 }
 
-function goToGenerate() {
-  router.push(`/generate/${taskId}`)
-}
-
 
 </script>
 
@@ -118,8 +114,7 @@ function goToGenerate() {
           <NButton size="small" @click="cancelEdit" ghost>取消</NButton>
           <NButton size="small" type="primary" :loading="saving" @click="confirmEdit">保存</NButton>
         </template>
-        <NButton @click="goToGenerate" ghost>重新生成</NButton>
-      </NSpace>
+        </NSpace>
     </NSpace>
 
     <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
