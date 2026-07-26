@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { marked } from 'marked'
 import {
   NCard,
@@ -17,6 +17,7 @@ import {
 import { api } from '../api/client'
 
 const route = useRoute()
+const router = useRouter()
 const taskId = route.params.taskId as string
 const message = useMessage()
 
@@ -43,6 +44,10 @@ onMounted(async () => {
     error.value = e.message
   }
 })
+
+function goToMinutes() {
+  router.push(`/minutes/${taskId}`)
+}
 
 async function doGenerate(force = false) {
   generating.value = true
@@ -84,7 +89,13 @@ function downloadMarkdown() {
 
 <template>
   <div>
-    <h1 style="font-size: 24px; margin-bottom: 24px;">生成会议纪要</h1>
+    <NSpace align="center" justify="space-between" style="margin-bottom: 24px;">
+      <h1 style="font-size: 24px; margin: 0;">生成会议纪要</h1>
+      <NSpace v-if="minutes">
+        <NButton size="small" @click="goToMinutes" type="primary">查看纪要</NButton>
+        <NButton size="small" :loading="generating" @click="doGenerate(true)" ghost>重新生成</NButton>
+      </NSpace>
+    </NSpace>
 
     <NCard title="选择模板" style="margin-bottom: 16px;">
       <NRadioGroup v-model:value="selectedTemplate">
@@ -113,26 +124,17 @@ function downloadMarkdown() {
       />
     </NCard>
 
-    <NSpace style="margin-bottom: 16px;">
-      <NButton
-        type="primary"
-        size="large"
-        :loading="generating"
-        @click="doGenerate(false)"
-        style="flex: 1;"
-      >
-        {{ generating ? '生成中...' : (minutes ? '使用缓存' : '生成会议纪要') }}
-      </NButton>
-      <NButton
-        v-if="minutes"
-        size="large"
-        :loading="generating"
-        @click="doGenerate(true)"
-        ghost
-      >
-        重新生成
-      </NButton>
-    </NSpace>
+    <NButton
+      v-if="!minutes"
+      type="primary"
+      size="large"
+      block
+      :loading="generating"
+      @click="doGenerate(false)"
+      style="margin-bottom: 16px;"
+    >
+      {{ generating ? '生成中...' : '生成会议纪要' }}
+    </NButton>
 
     <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
 
