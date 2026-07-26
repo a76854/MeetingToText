@@ -94,7 +94,6 @@ _USER_SETTING_KEYS = {
     "llm_model": str,
     "llm_temperature": float,
     "llm_max_tokens": int,
-    "llm_max_input_tokens": int,
     "asr_model_type": str,
     "asr_model_name": str,
     "ncpu": int,
@@ -105,7 +104,7 @@ _USER_SETTING_KEYS = {
     "audio_source": str,
 }
 
-_BOOL_KEYS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad", "auto_generate_minutes"}
+_BOOL_KEYS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
 
 
 def _load_user_settings() -> int:

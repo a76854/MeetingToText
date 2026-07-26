@@ -16,9 +16,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     segments TEXT DEFAULT '[]',
     full_text TEXT DEFAULT '',
     minutes TEXT DEFAULT '',
-    minutes_cache_key TEXT DEFAULT '',
-    minutes_call_count INTEGER DEFAULT 0,
-    last_generate_at TEXT DEFAULT '',
     error TEXT DEFAULT '',
     progress TEXT DEFAULT '{}'
 );
@@ -43,12 +40,6 @@ class TaskStore:
             cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
             if "progress" not in cols:
                 conn.execute("ALTER TABLE tasks ADD COLUMN progress TEXT DEFAULT '{}'")
-            if "minutes_cache_key" not in cols:
-                conn.execute("ALTER TABLE tasks ADD COLUMN minutes_cache_key TEXT DEFAULT ''")
-            if "minutes_call_count" not in cols:
-                conn.execute("ALTER TABLE tasks ADD COLUMN minutes_call_count INTEGER DEFAULT 0")
-            if "last_generate_at" not in cols:
-                conn.execute("ALTER TABLE tasks ADD COLUMN last_generate_at TEXT DEFAULT ''")
             conn.commit()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -81,13 +72,6 @@ class TaskStore:
             return None
         return self._row_to_task(row)
 
-    def get_row(self, task_id: str) -> dict | None:
-        with self._get_conn() as conn:
-            row = conn.execute("SELECT * FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        if row is None:
-            return None
-        return {k: row[k] for k in row.keys()}
-
     def update_progress(self, task_id: str, status: TaskStatus, error: str | None = None):
         with self._lock:
             with self._get_conn() as conn:
@@ -103,8 +87,8 @@ class TaskStore:
         with self._lock:
             with self._get_conn() as conn:
                 conn.execute(
-                    "UPDATE tasks SET status = ?, duration = ?, segments = ?, full_text = ?, minutes = ?, minutes_cache_key = ?, error = ?, progress = ? WHERE id = ?",
-                    (TaskStatus.pending.value, 0.0, "[]", "", "", "", "", "{}", task_id),
+                    "UPDATE tasks SET status = ?, duration = ?, segments = ?, full_text = ?, minutes = ?, error = ?, progress = ? WHERE id = ?",
+                    (TaskStatus.pending.value, 0.0, "[]", "", "", "", "{}", task_id),
                 )
                 conn.commit()
 
@@ -126,50 +110,19 @@ class TaskStore:
                 )
                 conn.commit()
 
-    def save_minutes(self, task_id: str, minutes: str, cache_key: str = ""):
+    def save_minutes(self, task_id: str, minutes: str):
         with self._lock:
             with self._get_conn() as conn:
-                conn.execute(
-                    "UPDATE tasks SET minutes = ?, minutes_cache_key = ? WHERE id = ?",
-                    (minutes, cache_key, task_id),
-                )
+                conn.execute("UPDATE tasks SET minutes = ? WHERE id = ?", (minutes, task_id))
                 conn.commit()
-
-    def record_generate_call(self, task_id: str, when_iso: str) -> int:
-        """Increment minutes_call_count and stamp last_generate_at. Returns new count."""
-        with self._lock:
-            with self._get_conn() as conn:
-                row = conn.execute(
-                    "SELECT minutes_call_count FROM tasks WHERE id = ?", (task_id,),
-                ).fetchone()
-                new_count = (row["minutes_call_count"] if row else 0) + 1
-                conn.execute(
-                    "UPDATE tasks SET minutes_call_count = ?, last_generate_at = ? WHERE id = ?",
-                    (new_count, when_iso, task_id),
-                )
-                conn.commit()
-        return new_count
-
-    def get_generate_stats(self, task_id: str) -> dict:
-        with self._get_conn() as conn:
-            row = conn.execute(
-                "SELECT minutes_call_count, last_generate_at FROM tasks WHERE id = ?",
-                (task_id,),
-            ).fetchone()
-        if row is None:
-            return {"count": 0, "last_at": ""}
-        return {
-            "count": row["minutes_call_count"] or 0,
-            "last_at": row["last_generate_at"] or "",
-        }
 
     def update_segments(self, task_id: str, segments: list[TranscriptSegment], full_text: str):
         segments_json = json.dumps([s.model_dump() for s in segments], ensure_ascii=False)
         with self._lock:
             with self._get_conn() as conn:
                 conn.execute(
-                    "UPDATE tasks SET segments = ?, full_text = ?, minutes = ?, minutes_cache_key = ? WHERE id = ?",
-                    (segments_json, full_text, "", "", task_id),
+                    "UPDATE tasks SET segments = ?, full_text = ? WHERE id = ?",
+                    (segments_json, full_text, task_id),
                 )
                 conn.commit()
 

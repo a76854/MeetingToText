@@ -18,24 +18,18 @@ marked.setOptions({ breaks: true, gfm: true })
 
 onMounted(async () => {
   try {
-    const [tplRes, taskRes] = await Promise.all([
-      api.getTemplates(),
-      api.getTask(taskId),
-    ])
-    templates.value = tplRes.templates
-    if (taskRes.minutes) {
-      minutes.value = taskRes.minutes
-    }
+    const res = await api.getTemplates()
+    templates.value = res.templates
   } catch (e: any) {
     error.value = e.message
   }
 })
 
-async function doGenerate(force = false) {
+async function doGenerate() {
   generating.value = true
   error.value = ''
   try {
-    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value, force)
+    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value)
     minutes.value = res.minutes
   } catch (e: any) {
     error.value = e.message || '生成失败'
@@ -88,14 +82,9 @@ function downloadMarkdown() {
       <textarea id="customInstr" v-model="customInstructions" placeholder="例如：使用英文输出、重点提取技术讨论内容..." rows="3" class="input-field" />
     </div>
 
-    <div class="action-row">
-      <button class="btn-generate" @click="doGenerate(false)" :disabled="generating">
-        {{ generating ? '生成中...' : (minutes ? '使用缓存' : '生成会议纪要') }}
-      </button>
-      <button v-if="minutes" class="btn-regenerate" @click="doGenerate(true)" :disabled="generating" title="忽略缓存重新调用 LLM 生成">
-        重新生成
-      </button>
-    </div>
+    <button class="btn-generate" @click="doGenerate" :disabled="generating">
+      {{ generating ? '生成中...' : '生成会议纪要' }}
+    </button>
 
     <div v-if="error" class="error-box">{{ error }}</div>
 
@@ -147,13 +136,8 @@ h1 { font-size: 24px; margin-bottom: 24px; }
 }
 .input-field:focus { outline: none; border-color: #1a73e8; }
 
-.action-row {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 16px;
-}
 .btn-generate {
-  flex: 1;
+  width: 100%;
   padding: 14px;
   background: #1a73e8;
   color: white;
@@ -161,21 +145,10 @@ h1 { font-size: 24px; margin-bottom: 24px; }
   border-radius: 8px;
   font-size: 16px;
   cursor: pointer;
+  margin-bottom: 16px;
 }
-.btn-generate:hover:not(:disabled) { background: #1557b0; }
+.btn-generate:hover { background: #1557b0; }
 .btn-generate:disabled { opacity: 0.6; cursor: not-allowed; }
-
-.btn-regenerate {
-  padding: 14px 18px;
-  background: white;
-  color: #1a73e8;
-  border: 1px solid #1a73e8;
-  border-radius: 8px;
-  font-size: 14px;
-  cursor: pointer;
-}
-.btn-regenerate:hover:not(:disabled) { background: #f0f6ff; }
-.btn-regenerate:disabled { opacity: 0.6; cursor: not-allowed; }
 
 .minutes-output {
   background: white;

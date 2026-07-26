@@ -67,7 +67,6 @@ class GenerateRequest(BaseModel):
     task_id: str
     template_id: str = "meeting_minutes"
     custom_instructions: str = ""
-    force: bool = False
 
 
 class GenerateResponse(BaseModel):
@@ -80,8 +79,6 @@ class SettingsUpdate(BaseModel):
     llm_model: str | None = None
     llm_temperature: float | None = None
     llm_max_tokens: int | None = None
-    llm_max_input_tokens: int | None = None
-    auto_generate_minutes: bool | None = None
     asr_model_type: str | None = None
     asr_model_name: str | None = None
     asr_needs_punc: bool | None = None
@@ -102,8 +99,6 @@ class SettingsInfo(BaseModel):
     llm_api_key_set: bool = False
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
-    llm_max_input_tokens: int = 128000
-    auto_generate_minutes: bool = False
     asr_model_type: str
     asr_model_name: str = "iic/SenseVoiceSmall"
     asr_needs_punc: bool = False

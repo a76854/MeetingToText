@@ -15,7 +15,6 @@ const llmApiKey = ref('')
 const llmModel = ref('')
 const llmTemperature = ref(0.3)
 const llmMaxTokens = ref(4096)
-const llmMaxInputTokens = ref(128000)
 const asrModelType = ref('sensevoice')
 const asrModelName = ref('iic/SenseVoiceSmall')
 const asrNeedsPunc = ref(false)
@@ -41,7 +40,6 @@ onMounted(async () => {
     llmModel.value = s.llm_model
     llmTemperature.value = s.llm_temperature
     llmMaxTokens.value = s.llm_max_tokens
-    llmMaxInputTokens.value = s.llm_max_input_tokens
     asrModelType.value = s.asr_model_type
     asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
     asrNeedsPunc.value = s.asr_needs_punc
@@ -85,7 +83,6 @@ async function saveSettings() {
       llm_model: llmModel.value,
       llm_temperature: llmTemperature.value,
       llm_max_tokens: llmMaxTokens.value,
-      llm_max_input_tokens: llmMaxInputTokens.value,
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
       asr_needs_punc: asrNeedsPunc.value,
@@ -163,10 +160,6 @@ async function clearApiKey() {
               <input v-model.number="llmMaxTokens" type="number" min="256" max="32768" step="256" class="input" />
             </label>
           </div>
-          <label class="field">
-            <span>最大输入 tokens（超长转录将自动截断中间部分）</span>
-            <input v-model.number="llmMaxInputTokens" type="number" min="1024" max="999999" step="1024" class="input" />
-          </label>
         </div>
 
         <div class="section">

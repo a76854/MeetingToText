@@ -50,11 +50,6 @@ class Settings(BaseSettings):
     llm_model: str = "deepseek-chat"
     llm_temperature: float = 0.3
     llm_max_tokens: int = 4096
-    llm_max_input_tokens: int = 128000
-
-    # SAFETY: when False (default), the system MUST NOT auto-invoke the LLM
-    # after transcription completes. AI summary generation is user-initiated only.
-    auto_generate_minutes: bool = False
 
     ncpu: int = 0
 
