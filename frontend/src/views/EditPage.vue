@@ -2,6 +2,7 @@
 import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
+  NAlert,
   NCard,
   NButton,
   NSpace,
