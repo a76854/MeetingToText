@@ -16,6 +16,9 @@ from backend.app.services.asr_streaming import StreamingASR
 
 router = APIRouter(prefix="/api", tags=["record"])
 
+# Defense-in-depth vs unbounded audio_buffer growth when streaming setup stalls/fails (bug B5)
+AUDIO_BUFFER_MAX_SECONDS = 10
+
 
 @router.post("/record/start", response_model=UploadResponse)
 async def start_recording():
@@ -40,14 +43,13 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     cancelled = False
 
     async def _load_and_create_session():
-        nonlocal streaming_session, streaming_ready
+        nonlocal streaming_session, streaming_ready, model_loading
         try:
-            await asyncio.to_thread(
-                StreamingASR.get_instance(settings.streaming_asr_model_name).load
-            )
+            instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
+            await asyncio.to_thread(instance.load)
             if cancelled:
                 return
-            session = StreamingASR.get_instance().create_session(sample_rate)
+            session = await asyncio.to_thread(instance.create_session, sample_rate)
             chunks_to_feed = audio_buffer[:]
             audio_buffer.clear()
             streaming_session = session
@@ -66,8 +68,10 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                         break
             logger.info(f"streaming ASR ready for task={task_id}")
         except Exception as e:
-            logger.error(f"streaming ASR load failed: {e}")
-            streaming_ready = True
+            logger.error(f"streaming ASR load-failed for task={task_id}: {e}")
+            model_loading = None
+            streaming_ready = False
+            streaming_session = None
             audio_buffer.clear()
 
     async def _cancel_streaming():
@@ -102,6 +106,9 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                         logger.warning(f"streaming ASR error: {e}")
                 elif model_loading is not None:
                     audio_buffer.append(chunk)
+                    max_buffer_bytes = (sample_rate or 16000) * 2 * AUDIO_BUFFER_MAX_SECONDS
+                    while sum(len(c) for c in audio_buffer) > max_buffer_bytes:
+                        audio_buffer.pop(0)
             elif "text" in data:
                 msg = json.loads(data["text"])
                 action = msg.get("action")
