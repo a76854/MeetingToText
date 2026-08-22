@@ -23,8 +23,20 @@ dependencies = [
     "modelscope>=1.22.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "httpx",
+]
+
 [project.scripts]
 meetingtotext = "backend.app.server:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "smoke: non-hermetic end-to-end tests that download real FunASR models and use data/uploads recordings (deselect by default; run with -m smoke)",
+]
 
 [tool.setuptools.packages.find]
 include = ["backend*"]
