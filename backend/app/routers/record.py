@@ -1,5 +1,4 @@
 import os
-import uuid
 import json
 import asyncio
 import logging
@@ -9,22 +8,14 @@ logger = logging.getLogger(__name__)
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from backend.app.config import settings
-from backend.app.models.schemas import UploadResponse
 from backend.app.services.recorder import recorder_manager
-from backend.app.services.pipeline import create_task, get_task, submit_pipeline
+from backend.app.services.pipeline import create_task, submit_pipeline
 from backend.app.services.asr_streaming import StreamingASR
 
 router = APIRouter(prefix="/api", tags=["record"])
 
 # Defense-in-depth vs unbounded audio_buffer growth when streaming setup stalls/fails (bug B5)
 AUDIO_BUFFER_MAX_SECONDS = 10
-
-
-@router.post("/record/start", response_model=UploadResponse)
-async def start_recording():
-    task_id = uuid.uuid4().hex[:12]
-    filepath = await recorder_manager.start_recording(task_id)
-    return UploadResponse(task_id=task_id, filename=os.path.basename(filepath))
 
 
 @router.websocket("/record/{task_id}")

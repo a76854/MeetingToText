@@ -141,23 +141,6 @@ class TaskStore:
                 )
                 conn.commit()
 
-    def set_settings(self, mapping: dict[str, str]) -> None:
-        if not mapping:
-            return
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.executemany(
-                    "INSERT INTO app_settings (key, value) VALUES (?, ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
-                    list(mapping.items()),
-                )
-                conn.commit()
-
-    def get_all_settings(self) -> dict[str, str]:
-        with self._get_conn() as conn:
-            rows = conn.execute("SELECT key, value FROM app_settings").fetchall()
-        return {r["key"]: r["value"] for r in rows}
-
     def delete_setting(self, key: str) -> None:
         with self._lock:
             with self._get_conn() as conn:

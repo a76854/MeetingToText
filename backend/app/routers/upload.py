@@ -1,13 +1,12 @@
 import os
 import uuid
-import asyncio
 
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from backend.app.config import settings
 from backend.app.services.pipeline import create_task, get_task, cancel_pipeline
 from backend.app.services.store import get_store
-from backend.app.models.schemas import UploadResponse, TaskInfo, TaskStatus
+from backend.app.models.schemas import UploadResponse, TaskInfo
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
