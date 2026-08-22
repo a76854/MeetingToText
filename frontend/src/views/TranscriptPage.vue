@@ -37,6 +37,7 @@ const audioDuration = ref(0)
 let audioEventsAttached = false
 
 let es: EventSource | null = null
+let isUnmounted = false
 
 const exportFormatOptions = [
   { label: 'TXT', value: 'txt' },
@@ -53,6 +54,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  isUnmounted = true
   if (es) es.close()
 })
 
@@ -70,6 +72,7 @@ async function loadTask() {
 }
 
 function subscribeProgress() {
+  if (isUnmounted) return
   es = api.streamProgress(
     taskId,
     (t) => {
