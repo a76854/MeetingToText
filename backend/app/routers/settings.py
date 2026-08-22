@@ -18,7 +18,10 @@ _bg_tasks: set[asyncio.Task] = set()
 
 _INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
 _FLOAT_FIELDS = {"llm_temperature", "asr_merge_length_s"}
-_BOOL_FIELDS = {"asr_merge_vad", "asr_needs_punc"}
+# C1: keep in sync with server.py's _BOOL_KEYS — every bool setting must be
+# coerced here, otherwise it falls through to str(value) and is stored as
+# Python's capitalized "True"/"False" instead of lowercase "true"/"false".
+_BOOL_FIELDS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
 
 
 def _coerce(key: str, value: Any) -> Any:
@@ -50,11 +53,14 @@ async def get_settings():
         ncpu=int(s.get_setting("ncpu", str(settings.ncpu))),
         asr_batch_size_s=int(s.get_setting("asr_batch_size_s", str(settings.asr_batch_size_s))),
         asr_merge_length_s=float(s.get_setting("asr_merge_length_s", str(settings.asr_merge_length_s))),
-        asr_merge_vad=(s.get_setting("asr_merge_vad", "true").lower() == "true"),
+        # C2: bool defaults derive from the runtime settings object so
+        # MTT_* env overrides are visible in the UI, and every stored value
+        # parses with the same .lower() == "true" rule.
+        asr_merge_vad=(s.get_setting("asr_merge_vad", str(settings.asr_merge_vad)).lower() == "true"),
         asr_max_single_segment_time=int(s.get_setting("asr_max_single_segment_time", str(settings.asr_max_single_segment_time))),
-        streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", "false").lower() == "true"),
+        streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", str(settings.streaming_asr_enabled)).lower() == "true"),
         streaming_asr_model_name=s.get_setting("streaming_asr_model_name", settings.streaming_asr_model_name),
-        browser_noise_suppression=(s.get_setting("browser_noise_suppression", "true").lower() != "false"),
+        browser_noise_suppression=(s.get_setting("browser_noise_suppression", str(settings.browser_noise_suppression)).lower() == "true"),
         audio_source=s.get_setting("audio_source", settings.audio_source),
     )
 
@@ -82,7 +88,10 @@ async def update_settings(body: SettingsUpdate):
         if isinstance(raw, str) and not raw.strip():
             continue
         value = _coerce(key, raw)
-        s.set_setting(key, str(value))
+        # C3: bools are stored uniformly as lowercase "true"/"false" — never
+        # str(True)="True" — so every reader can use raw.lower() == "true".
+        stored = str(value).lower() if key in _BOOL_FIELDS else str(value)
+        s.set_setting(key, stored)
         setattr(settings, key, value)
         if key == "ncpu":
             set_cpu_threads(value)
