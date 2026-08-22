@@ -14,6 +14,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import { api, TaskListItem } from '../api/client'
+import { formatDuration } from '../utils/format'
 
 const router = useRouter()
 const dialog = useDialog()
@@ -54,24 +55,13 @@ function taskIcon(hasMinutes: boolean, hasTranscript: boolean): string {
   return hasMinutes ? '📋' : hasTranscript ? '📝' : '🎙️'
 }
 
-function formatTime(iso: string): string {
+function formatDateTime(iso: string): string {
   try {
     const d = new Date(iso)
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
   } catch {
     return iso
   }
-}
-
-function formatDuration(s: number): string {
-  if (!s) return '–'
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = Math.floor(s % 60)
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-  }
-  return `${m}:${String(sec).padStart(2, '0')}`
 }
 
 function openTask(t: TaskListItem) {
@@ -150,7 +140,7 @@ function removeTask(t: TaskListItem) {
                   {{ statusLabel(t.status) }}
                 </NTag>
                 <NText depth="3" style="font-size: 12px;">
-                  {{ formatTime(t.created_at) }}
+                  {{ formatDateTime(t.created_at) }}
                 </NText>
                 <NText v-if="t.duration" depth="3" style="font-size: 12px;">
                   · {{ formatDuration(t.duration) }}

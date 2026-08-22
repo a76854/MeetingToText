@@ -15,6 +15,8 @@ import {
   useMessage,
 } from 'naive-ui'
 import { api } from '../api/client'
+import { formatDuration } from '../utils/format'
+import { downloadUrl } from '../utils/download'
 import ProgressIndicator from '../components/ProgressIndicator.vue'
 
 const route = useRoute()
@@ -88,17 +90,6 @@ function subscribeProgress() {
   )
 }
 
-function formatTime(s: number) {
-  if (!s && s !== 0) return ''
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = Math.floor(s % 60)
-  if (h > 0) {
-    return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-  }
-  return `${m}:${String(sec).padStart(2, '0')}`
-}
-
 function goToGenerate() {
   router.push(`/generate/${taskId}`)
 }
@@ -130,13 +121,7 @@ function deleteTask() {
 }
 
 function exportAs(format: string) {
-  const url = api.exportUrl(taskId, format)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = ''
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+  downloadUrl(api.exportUrl(taskId, format))
 }
 
 function togglePlay() {
@@ -219,7 +204,7 @@ function retryTranscribe() {
             </NButton>
             <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 120px;">
               <span style="font-size: 12px; color: #666; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right;">
-                {{ formatTime(audioCurrentTime) }}
+                {{ formatDuration(audioCurrentTime) }}
               </span>
               <NSlider
                 :value="audioCurrentTime"
@@ -231,7 +216,7 @@ function retryTranscribe() {
                 @update:value="onSeekChange"
               />
               <span style="font-size: 12px; color: #666; font-variant-numeric: tabular-nums; min-width: 40px;">
-                {{ formatTime(audioDuration) }}
+                {{ formatDuration(audioDuration) }}
               </span>
             </div>
           </div>
@@ -294,7 +279,7 @@ function retryTranscribe() {
                   {{ seg.speaker || '未知说话人' }}
                 </NTag>
                 <span style="font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums;">
-                  {{ formatTime(seg.start) }} - {{ formatTime(seg.end) }}
+                  {{ formatDuration(seg.start) }} - {{ formatDuration(seg.end) }}
                 </span>
               </NSpace>
               <div style="font-size: 15px; line-height: 1.6;">{{ seg.text }}</div>

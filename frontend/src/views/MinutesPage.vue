@@ -14,6 +14,8 @@ import {
 } from 'naive-ui'
 import { api } from '../api/client'
 import { sanitizeHtml } from '../utils/sanitize'
+import { copyText } from '../utils/clipboard'
+import { downloadText } from '../utils/download'
 
 const route = useRoute()
 const message = useMessage()
@@ -49,21 +51,16 @@ async function loadMinutes() {
 
 const minutesHtml = computed(() => minutes.value ? sanitizeHtml(minutes.value) : '')
 
-function copyToClipboard() {
-  navigator.clipboard.writeText(minutes.value)
-  message.success('已复制到剪贴板')
+async function copyToClipboard() {
+  if (await copyText(minutes.value)) {
+    message.success('已复制到剪贴板')
+  } else {
+    message.error('复制失败')
+  }
 }
 
 function downloadMd() {
-  const blob = new Blob([minutes.value], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `纪要-${taskId}.md`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  downloadText(`纪要-${taskId}.md`, minutes.value)
 }
 
 function startEdit() {

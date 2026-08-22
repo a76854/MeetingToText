@@ -1,5 +1,7 @@
 import { ref } from 'vue'
 import { api } from '../api/client'
+import { formatDuration } from '../utils/format'
+import { downloadBlob } from '../utils/download'
 
 type RecorderState = 'idle' | 'preparing' | 'recording' | 'stopping' | 'cancelling' | 'done'
 
@@ -43,19 +45,13 @@ function genTaskId(): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
 }
 
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60)
-  const sec = Math.floor(s % 60)
-  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
-}
-
 function startTimer() {
   startTime = Date.now()
   elapsedSec.value = 0
   timer.value = '00:00'
   timerInterval = window.setInterval(() => {
     elapsedSec.value = Math.floor((Date.now() - startTime) / 1000)
-    timer.value = formatTime(elapsedSec.value)
+    timer.value = formatDuration(elapsedSec.value)
   }, 200)
 }
 
@@ -430,14 +426,7 @@ export async function stopRecording(router?: any) {
         return
       } catch (e: any) {
         error.value = '上传录音失败，已保存到本地下载'
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `recording_${taskId.value}.webm`
-        document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        URL.revokeObjectURL(url)
+        downloadBlob(`recording_${taskId.value}.webm`, blob)
         state.value = 'idle'
         releaseWakeLock()
         return

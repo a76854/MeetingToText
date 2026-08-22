@@ -14,6 +14,8 @@ import {
 } from 'naive-ui'
 import { api } from '../api/client'
 import { sanitizeHtml } from '../utils/sanitize'
+import { copyText } from '../utils/clipboard'
+import { downloadBlob } from '../utils/download'
 
 const route = useRoute()
 const router = useRouter()
@@ -64,22 +66,17 @@ async function doGenerate() {
 
 const minutesHtml = computed(() => minutes.value ? sanitizeHtml(minutes.value) : '')
 
-function copyToClipboard() {
-  navigator.clipboard.writeText(minutes.value)
-  message.success('已复制到剪贴板')
+async function copyToClipboard() {
+  if (await copyText(minutes.value)) {
+    message.success('已复制到剪贴板')
+  } else {
+    message.error('复制失败')
+  }
 }
 
 function downloadMarkdown() {
   const url = api.exportUrl(taskId, 'md')
-  fetch(url).then(r => r.blob()).then(blob => {
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = ''
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(a.href)
-  })
+  fetch(url).then(r => r.blob()).then(blob => downloadBlob('', blob))
 }
 </script>
 
