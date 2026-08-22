@@ -5,12 +5,21 @@ import shutil
 
 from backend.app.config import settings
 
+# Session lifecycle (reconnect-resume):
+#   active    - a live websocket owns the session and appends audio
+#   suspended - owning websocket dropped; grace window before finalize
+STATE_ACTIVE = "active"
+STATE_SUSPENDED = "suspended"
+
 
 class RecorderManager:
     def __init__(self):
         self._active_recordings: dict[str, dict] = {}
 
     async def start_recording(self, task_id: str) -> str:
+        existing = self._active_recordings.get(task_id)
+        if existing is not None:
+            return existing["filepath"]
         filepath = os.path.join(settings.temp_dir, f"record_{task_id}_{int(time.time())}.wav")
         self._active_recordings[task_id] = {
             "filepath": filepath,
@@ -22,6 +31,8 @@ class RecorderManager:
             "sample_width": 2,
             "byte_count": 0,
             "started_at": time.time(),
+            "state": STATE_ACTIVE,
+            "owner": None,
         }
         return filepath
 
@@ -101,6 +112,55 @@ class RecorderManager:
 
     def has_session(self, task_id: str) -> bool:
         return task_id in self._active_recordings
+
+    # ---- reconnect/resume state machine ----
+
+    def get_session_state(self, task_id: str) -> str | None:
+        rec = self._active_recordings.get(task_id)
+        return rec["state"] if rec else None
+
+    def attach_owner(self, task_id: str, owner_id) -> bool:
+        """Bind a connection to a session (single-owner guard).
+
+        False when the session is missing or actively owned by another
+        connection; adopting a suspended session always succeeds.
+        """
+        rec = self._active_recordings.get(task_id)
+        if rec is None:
+            return False
+        current = rec.get("owner")
+        if current is not None and current != owner_id:
+            return False
+        rec["owner"] = owner_id
+        rec["state"] = STATE_ACTIVE
+        return True
+
+    def detach_owner(self, task_id: str, owner_id) -> None:
+        rec = self._active_recordings.get(task_id)
+        if rec is not None and rec.get("owner") == owner_id:
+            rec["owner"] = None
+
+    async def suspend_recording(self, task_id: str) -> bool:
+        """Active -> suspended (ws dropped without stop/discard)."""
+        rec = self._active_recordings.get(task_id)
+        if rec is None or rec["state"] != STATE_ACTIVE:
+            return False
+        rec["state"] = STATE_SUSPENDED
+        rec["owner"] = None
+        return True
+
+    async def resume_recording(self, task_id: str, owner_id=None) -> bool:
+        """Suspended -> active; same wav keeps appending."""
+        rec = self._active_recordings.get(task_id)
+        if rec is None or rec["state"] != STATE_SUSPENDED:
+            return False
+        rec["state"] = STATE_ACTIVE
+        rec["owner"] = owner_id
+        return True
+
+    async def discard_recording(self, task_id: str) -> bool:
+        """Delete file + session without creating a task (any state)."""
+        return await self.cancel_recording(task_id)
 
 
 recorder_manager = RecorderManager()

@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     streaming_asr_enabled: bool = False
     streaming_asr_model_name: str = "paraformer-zh-streaming"
 
+    # Reconnect-resume: suspended-session grace window; liveness timeout while
+    # attached is 3x this value (see record.py).
+    reconnect_grace_seconds: int = 60
+
     browser_noise_suppression: bool = True
     audio_source: str = "mic"
 

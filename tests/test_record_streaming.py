@@ -95,6 +95,15 @@ class FakeRecorderManager:
     def has_session(self, task_id):
         return False
 
+    def get_session_state(self, task_id):
+        return None
+
+    def attach_owner(self, task_id, owner_id):
+        return True
+
+    def detach_owner(self, task_id, owner_id):
+        pass
+
     async def start_recording(self, task_id):
         return f"/tmp/fake_{task_id}.wav"
 

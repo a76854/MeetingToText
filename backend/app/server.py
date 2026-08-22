@@ -111,6 +111,7 @@ _USER_SETTING_KEYS = {
     "asr_merge_length_s": float,
     "asr_max_single_segment_time": int,
     "streaming_asr_model_name": str,
+    "reconnect_grace_seconds": int,
     "audio_source": str,
 }
 
