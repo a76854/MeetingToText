@@ -29,24 +29,29 @@ async def upload_file(file: UploadFile = File(...)):
     filepath = os.path.join(settings.upload_dir, safe_name)
 
     written = 0
+    overflow = False
+    max_size = settings.max_upload_bytes
     chunk_size = 1024 * 1024
     with open(filepath, "wb") as f:
         while True:
             chunk = await file.read(chunk_size)
             if not chunk:
                 break
-            written += len(chunk)
-            if written > settings.max_upload_bytes:
-                f.close()
-                try:
-                    os.remove(filepath)
-                except OSError:
-                    pass
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"文件超过 {settings.max_upload_bytes // (1024 * 1024)}MB 限制",
-                )
+            if written + len(chunk) > max_size:
+                overflow = True
+                break
             f.write(chunk)
+            written += len(chunk)
+
+    if overflow:
+        try:
+            os.remove(filepath)
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件超过 {max_size // (1024 * 1024)}MB 限制",
+        )
 
     if written == 0:
         try:

@@ -1,4 +1,5 @@
 from openai import OpenAI
+import threading
 
 
 class LLMClient:
@@ -38,24 +39,28 @@ class LLMClient:
 
 
 _llm_instance: LLMClient | None = None
+_llm_lock = threading.Lock()
 
 
 def get_llm() -> LLMClient:
     global _llm_instance
     if _llm_instance is None:
-        from backend.app.config import settings
-        _llm_instance = LLMClient(
-            base_url=settings.llm_base_url,
-            api_key=settings.llm_api_key,
-            model=settings.llm_model,
-        )
+        with _llm_lock:
+            if _llm_instance is None:
+                from backend.app.config import settings
+                _llm_instance = LLMClient(
+                    base_url=settings.llm_base_url,
+                    api_key=settings.llm_api_key,
+                    model=settings.llm_model,
+                )
     return _llm_instance
 
 
 def update_llm_config(base_url: str, api_key: str, model: str):
     global _llm_instance
-    _llm_instance = LLMClient(
-        base_url=base_url,
-        api_key=api_key,
-        model=model,
-    )
+    with _llm_lock:
+        _llm_instance = LLMClient(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+        )

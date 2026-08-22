@@ -193,9 +193,8 @@ def run_pipeline(task_id: str):
             logger.info(f"Original-audio ASR returned {len(segments_raw)} segments")
 
         if not segments_raw:
-            logger.warning(
-                f"ASR produced 0 segments for task={task_id}; "
-                f"audio may be too quiet, in unsupported language, or the model failed to load"
+            raise RuntimeError(
+                "未能识别到语音内容，请检查音频是否有效（可能静音、语言不支持或麦克风未正常工作）"
             )
 
         update_step("vad", "done", overall=0.8)

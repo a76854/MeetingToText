@@ -9,9 +9,7 @@ const props = defineProps<{
 
 const stepLabels: Record<string, string> = {
   vad: '语音活动检测',
-  asr: '语音识别',
-  diarization: '说话人分离',
-  alignment: '文本对齐',
+  asr: '语音识别与说话人分离',
 }
 
 const statusMap: Record<string, 'process' | 'finish' | 'error' | 'wait'> = {

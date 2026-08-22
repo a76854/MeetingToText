@@ -92,10 +92,10 @@ class RecorderManager:
                 wf.close()
             except Exception:
                 pass
-            try:
-                os.remove(rec["filepath"])
-            except OSError:
-                pass
+        try:
+            os.remove(rec["filepath"])
+        except OSError:
+            pass
         rec["pending"].clear()
         return True
 
