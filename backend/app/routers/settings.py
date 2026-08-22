@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from backend.app.config import settings, set_cpu_threads
+from backend.app.config import Settings, settings, set_cpu_threads
 from backend.app.models.schemas import SettingsUpdate, SettingsInfo
 from backend.app.services.llm import update_llm_config
 from backend.app.services.asr import unload_all_asr
@@ -77,7 +77,9 @@ async def update_settings(body: SettingsUpdate):
     for key, raw in updates.items():
         if raw is None:
             continue
-        if isinstance(raw, str) and not raw.strip() and key != "llm_api_key":
+        # Empty string means "leave unchanged" for ANY key (the settings UI sends
+        # untouched fields as ""); explicit clears go through DELETE /settings/{key}.
+        if isinstance(raw, str) and not raw.strip():
             continue
         value = _coerce(key, raw)
         s.set_setting(key, str(value))
@@ -109,16 +111,30 @@ async def update_settings(body: SettingsUpdate):
     return {"status": "ok"}
 
 
+_DELETABLE_KEYS = {
+    "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
+    "asr_model_type", "asr_model_name", "asr_needs_punc", "ncpu",
+    "asr_batch_size_s", "asr_merge_length_s", "asr_merge_vad", "asr_max_single_segment_time",
+    "streaming_asr_enabled", "streaming_asr_model_name",
+    "browser_noise_suppression", "audio_source",
+}
+
+
 @router.delete("/settings/{key}")
 async def delete_setting(key: str):
-    if key not in {
-        "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
-        "asr_model_type", "asr_model_name", "asr_needs_punc", "ncpu",
-        "asr_batch_size_s", "asr_merge_length_s", "asr_merge_vad", "asr_max_single_segment_time",
-        "streaming_asr_enabled", "streaming_asr_model_name",
-        "browser_noise_suppression", "audio_source",
-    }:
+    if key not in _DELETABLE_KEYS:
         from fastapi import HTTPException
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
     get_store().delete_setting(key)
+    # Reset the runtime object too, otherwise generation keeps using the deleted
+    # value while GET /settings reports the setting as gone. Defaults come from a
+    # fresh Settings() so env-provided (MTT_*) boot values are preserved.
+    value = getattr(Settings(), key)
+    setattr(settings, key, value)
+    if key == "ncpu":
+        set_cpu_threads(value)
+    if key.startswith("llm_"):
+        # Rebuild the cached LLM client from the reset values so a deleted
+        # llm_api_key can't keep serving generate requests.
+        update_llm_config(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
     return {"status": "ok", "key": key}
