@@ -15,6 +15,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import { api } from '../api/client'
+import { sanitizeHtml } from '../utils/sanitize'
 
 const route = useRoute()
 const router = useRouter()
@@ -49,15 +50,12 @@ function goToMinutes() {
   router.push(`/minutes/${taskId}`)
 }
 
-async function doGenerate(force = false) {
+async function doGenerate() {
   generating.value = true
   error.value = ''
   try {
-    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value, force)
+    const res = await api.generateMinutes(taskId, selectedTemplate.value, customInstructions.value)
     minutes.value = res.minutes
-    if (force) {
-      message.success('已重新生成')
-    }
   } catch (e: any) {
     error.value = e.message || '生成失败'
     message.error(error.value)
@@ -66,7 +64,7 @@ async function doGenerate(force = false) {
   }
 }
 
-const minutesHtml = computed(() => minutes.value ? marked.parse(minutes.value) as string : '')
+const minutesHtml = computed(() => minutes.value ? sanitizeHtml(minutes.value) : '')
 
 function copyToClipboard() {
   navigator.clipboard.writeText(minutes.value)
@@ -93,7 +91,7 @@ function downloadMarkdown() {
       <h1 style="font-size: 24px; margin: 0;">生成会议纪要</h1>
       <NSpace v-if="minutes">
         <NButton size="small" @click="goToMinutes" type="primary">查看纪要</NButton>
-        <NButton size="small" :loading="generating" @click="doGenerate(true)" ghost>重新生成</NButton>
+        <NButton size="small" :loading="generating" @click="doGenerate" ghost>重新生成</NButton>
       </NSpace>
     </NSpace>
 
@@ -130,7 +128,7 @@ function downloadMarkdown() {
       size="large"
       block
       :loading="generating"
-      @click="doGenerate(false)"
+      @click="doGenerate"
       style="margin-bottom: 16px;"
     >
       {{ generating ? '生成中...' : '生成会议纪要' }}

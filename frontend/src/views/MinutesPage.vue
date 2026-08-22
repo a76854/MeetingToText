@@ -13,6 +13,7 @@ import {
   useDialog,
 } from 'naive-ui'
 import { api } from '../api/client'
+import { sanitizeHtml } from '../utils/sanitize'
 
 const route = useRoute()
 const router = useRouter()
@@ -47,7 +48,7 @@ async function loadMinutes() {
   }
 }
 
-const minutesHtml = computed(() => minutes.value ? marked.parse(minutes.value) as string : '')
+const minutesHtml = computed(() => minutes.value ? sanitizeHtml(minutes.value) : '')
 
 function copyToClipboard() {
   navigator.clipboard.writeText(minutes.value)
