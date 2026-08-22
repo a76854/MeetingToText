@@ -230,10 +230,13 @@ class TaskStore:
 
 
 _store: TaskStore | None = None
+_store_lock = threading.Lock()
 
 
 def get_store() -> TaskStore:
     global _store
     if _store is None:
-        _store = TaskStore(settings.db_path)
+        with _store_lock:
+            if _store is None:
+                _store = TaskStore(settings.db_path)
     return _store

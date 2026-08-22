@@ -1,3 +1,4 @@
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter
@@ -10,6 +11,9 @@ from backend.app.services.asr_streaming import StreamingASR
 from backend.app.services.store import get_store
 
 router = APIRouter(prefix="/api", tags=["settings"])
+
+# Keep references to fire-and-forget tasks so the event loop doesn't GC them mid-run.
+_bg_tasks: set[asyncio.Task] = set()
 
 
 _INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
@@ -95,9 +99,10 @@ async def update_settings(body: SettingsUpdate):
 
     if streaming_asr_touched:
         if settings.streaming_asr_enabled:
-            import asyncio
             instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
-            asyncio.create_task(asyncio.to_thread(instance.load))
+            task = asyncio.create_task(asyncio.to_thread(instance.load))
+            _bg_tasks.add(task)
+            task.add_done_callback(_bg_tasks.discard)
         else:
             StreamingASR.unload_all()
 

@@ -1,7 +1,7 @@
 import sys
 import os
 import time
-import threading
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,6 +17,7 @@ import uvicorn
 
 from backend.app.config import settings
 from backend.app.routers import upload, record, transcribe, generate, settings as settings_router, export, audio
+from backend.app.services.pipeline import pipeline_executor
 
 
 @asynccontextmanager
@@ -33,8 +34,9 @@ async def _lifespan(app: FastAPI):
     if orphaned:
         logger.info(f"marked {orphaned} orphaned task(s) as error (server restart)")
 
-    _preload_models()
+    await _preload_models()
     yield
+    pipeline_executor.shutdown(wait=True)
 
 
 app = FastAPI(
@@ -162,18 +164,26 @@ def _recover_orphan_tasks() -> int:
     return get_store().mark_orphan_processing()
 
 
-def _preload_models() -> None:
-    """Pre-load streaming ASR model if enabled; final ASR loads on demand."""
+async def _preload_models() -> None:
+    """Pre-load streaming ASR model if enabled; final ASR loads on demand.
+
+    Awaited from the lifespan instead of a fire-and-forget daemon thread so a
+    uvicorn reload cannot kill a half-finished load mid-startup. Idempotent:
+    StreamingASR.load() is guarded by its own lock + None-check, and an
+    already-loaded singleton short-circuits, so repeated lifespans (reload)
+    never duplicate loads or leave partial state behind.
+    """
     if not settings.streaming_asr_enabled:
         return
-    def _load():
-        try:
-            from backend.app.services.asr_streaming import StreamingASR
-            StreamingASR.get_instance(settings.streaming_asr_model_name).load()
-        except Exception as e:
-            logger.error(f"streaming ASR preload failed: {e}")
-
-    threading.Thread(target=_load, daemon=True, name="preload-streaming").start()
+    try:
+        from backend.app.services.asr_streaming import StreamingASR
+        instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
+        if instance.model is not None:
+            logger.info("streaming ASR model already loaded; skipping preload")
+            return
+        await asyncio.to_thread(instance.load)
+    except Exception as e:
+        logger.error(f"streaming ASR preload failed: {e}")
 
 
 def main():

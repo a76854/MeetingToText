@@ -58,6 +58,14 @@ class StreamingASRSession:
             self.resampled_audio = np.concatenate([self.resampled_audio, new_resampled])
         self._processed_input = len(self.raw_audio)
 
+        # Bound memory: keep only the resample overlap preceding
+        # _processed_input plus unprocessed tail; shift both counters by the
+        # same amount so chunk alignment is unchanged.
+        trim = self._processed_input - self.RESAMPLE_OVERLAP
+        if trim > 0:
+            self.raw_audio = self.raw_audio[trim:]
+            self._processed_input -= trim
+
         return self._process_buffer()
 
     def _process_buffer(self) -> str:
@@ -81,9 +89,9 @@ class StreamingASRSession:
                     if text:
                         new_text += text
                         self.partial_text += text
-            except Exception:
+            except Exception as e:
                 # Swallow streaming errors to avoid breaking the recording
-                pass
+                logger.warning(f"streaming ASR chunk failed: {e}")
 
         return new_text
 
@@ -105,8 +113,8 @@ class StreamingASRSession:
                 text = result[0].get("text", "")
                 if text:
                     self.partial_text += text
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"streaming ASR finalize failed: {e}")
 
         self.resampled_audio = np.array([], dtype=np.float32)
         return self.partial_text
