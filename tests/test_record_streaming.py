@@ -84,12 +84,13 @@ class FakeStreamingASR:
 
 
 class FakeRecorderManager:
-    def __init__(self, expected_chunks=0):
+    def __init__(self, expected_chunks=0, release_gate=None):
         self.chunks = []
         self.sample_rates = []
         self.stopped = False
         self.expected_chunks = expected_chunks
         self.chunks_done = threading.Event()
+        self.release_gate = release_gate
 
     def has_session(self, task_id):
         return False
@@ -104,10 +105,28 @@ class FakeRecorderManager:
         self.chunks.append(chunk)
         if self.expected_chunks and len(self.chunks) >= self.expected_chunks:
             self.chunks_done.set()
+            if self.release_gate is not None:
+                self.release_gate.set()
 
     async def stop_recording(self, task_id):
         self.stopped = True
         return None
+
+
+class FailureLogHandler(logging.Handler):
+    """Attached to record_module.logger; emit() runs synchronously inside
+    record.py's except body on the event-loop thread, so error_seen doubles as
+    an exact 'failure branch fully executed' barrier."""
+
+    def __init__(self):
+        super().__init__(level=logging.ERROR)
+        self.records = []
+        self.error_seen = threading.Event()
+
+    def emit(self, record):
+        self.records.append(record)
+        if record.levelno >= logging.ERROR and "load-failed" in record.getMessage():
+            self.error_seen.set()
 
 
 def _reset_fakes():
@@ -117,13 +136,30 @@ def _reset_fakes():
     FakeStreamingASR.gate = None
 
 
+def _wait_for_attempt(fake_asr, n, timeout=10):
+    """Block until the n-th load attempt has started (get_instance called).
+    get_instance runs inside the load task's first step, i.e. after a portal
+    roundtrip — bare list indexing would race under load."""
+    deadline = time.time() + timeout
+    while len(fake_asr.instances) < n:
+        if time.time() >= deadline:
+            raise AssertionError(
+                f"expected {n} load attempts, saw {len(fake_asr.instances)}"
+            )
+        time.sleep(0.01)
+    return fake_asr.instances[n - 1]
+
+
 @pytest.fixture()
 def fake_asr(monkeypatch):
     _reset_fakes()
     monkeypatch.setattr(record_module, "StreamingASR", FakeStreamingASR)
     monkeypatch.setattr(settings, "streaming_asr_enabled", True)
     monkeypatch.setattr(settings, "streaming_asr_model_name", "custom-streaming-model")
-    return FakeStreamingASR
+    yield FakeStreamingASR
+    if FakeStreamingASR.gate is not None:
+        FakeStreamingASR.gate.set()
+    _reset_fakes()
 
 
 @pytest.fixture()
@@ -181,28 +217,36 @@ def test_b4_get_instance_uses_configured_model_name(fake_asr, ws_client):
     assert rec.stopped is True
 
 
-def test_b5_load_failure_resets_state_and_logs(fake_asr, ws_client, caplog):
+def test_b5_load_failure_resets_state_and_logs(fake_asr, ws_client):
     """B5: on load failure -> log load-failed, reset model_loading so a later
     config can retry, keep streaming not-ready (no partials, no finalize)."""
     fake_asr.load_error = RuntimeError("boom")
-    caplog.set_level(logging.ERROR)
-    client, rec = ws_client()
-    with client.websocket_connect("/api/record/b5") as ws:
-        ws.send_text(json.dumps({"type": "config", "sample_rate": 16000}))
-        assert fake_asr.instances[0].load_finished.wait(10)
+    log_capture = FailureLogHandler()
+    record_module.logger.addHandler(log_capture)
+    try:
+        client, rec = ws_client()
+        with client.websocket_connect("/api/record/b5") as ws:
+            ws.send_text(json.dumps({"type": "config", "sample_rate": 16000}))
+            inst1 = _wait_for_attempt(fake_asr, 1)
+            assert inst1.load_finished.wait(10)
 
-        # Retry only spawns attempt #2 because model_loading was reset to None.
-        ws.send_text(json.dumps({"type": "config", "sample_rate": 16000}))
-        assert fake_asr.instances[1].load_finished.wait(10)
+            # error_seen proves record.py's failure branch (which resets
+            # model_loading) fully ran, so the retry below cannot be guard-dropped.
+            assert log_capture.error_seen.wait(10)
+            ws.send_text(json.dumps({"type": "config", "sample_rate": 16000}))
+            inst2 = _wait_for_attempt(fake_asr, 2)
+            assert inst2.load_finished.wait(10)
 
-        ws.send_bytes(b"\x00\x00" * 16)  # post-failure chunk: must be ignored, not buffered forever
-        ws.send_text(json.dumps({"action": "stop"}))
-        frames = _drain_until_status(ws)
+            ws.send_bytes(b"\x00\x00" * 16)  # post-failure chunk: must be ignored, not buffered forever
+            ws.send_text(json.dumps({"action": "stop"}))
+            frames = _drain_until_status(ws)
+    finally:
+        record_module.logger.removeHandler(log_capture)
 
-    assert [c for c in fake_asr.calls] == ["custom-streaming-model"] * 2
+    assert fake_asr.calls == ["custom-streaming-model"] * 2
     assert all(i.session is None for i in fake_asr.instances)
     assert all(m.get("type") != "partial" for m in frames)
-    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    errors = [r for r in log_capture.records if r.levelno >= logging.ERROR]
     assert any("load-failed" in r.getMessage() for r in errors)
 
 
@@ -215,7 +259,9 @@ def test_b5_audio_buffer_hard_cap_under_gated_load(fake_asr, ws_client):
     n_chunks = 8  # 240000 bytes total -> trimming must drop the first 3 chunks
     gate = threading.Event()
     fake_asr.gate = gate
-    rec = FakeRecorderManager(expected_chunks=n_chunks)
+    # Recorder releases the gate from the loop thread once all chunks are
+    # consumed, so the handler's final append+trim is ordered before replay.
+    rec = FakeRecorderManager(expected_chunks=n_chunks, release_gate=gate)
     client, _ = ws_client(rec)
 
     sent = []
@@ -226,7 +272,6 @@ def test_b5_audio_buffer_hard_cap_under_gated_load(fake_asr, ws_client):
             ws.send_bytes(chunk)
         assert rec.chunks_done.wait(10)  # all chunks consumed into (trimmed) buffer
 
-        gate.set()
         _read_partials(ws, 5)  # one partial per replayed chunk => replay finished
         ws.send_text(json.dumps({"action": "stop"}))
         _drain_until_status(ws)
