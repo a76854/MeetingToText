@@ -79,21 +79,26 @@ def create_task(filename: str, audio_path: str) -> TaskInfo:
     return get_store().create(task)
 
 
+def _read_mono(path: str) -> tuple[np.ndarray, int]:
+    """Read audio via soundfile as float32, collapsing multi-channel to mono."""
+    data, sr = sf.read(path, dtype="float32")
+    if len(data.shape) == 2:
+        data = data.mean(axis=1)
+    return data, sr
+
+
 def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
     """Load audio, resample to 16kHz if needed, write temp file for ASR.
 
     Returns (asr_input_path, original_sr, duration_seconds).
     """
     try:
-        audio_data, original_sr = sf.read(audio_path, dtype="float32")
+        audio_data, original_sr = _read_mono(audio_path)
     except Exception:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="PySoundFile failed")
             warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
             audio_data, original_sr = librosa.load(audio_path, sr=None, mono=True)
-
-    if len(audio_data.shape) == 2:
-        audio_data = audio_data.mean(axis=1)
 
     duration = len(audio_data) / original_sr
 
@@ -152,9 +157,7 @@ def run_pipeline(task_id: str):
             asr_temp_path = asr_input
 
         # Quick stats on the (resampled) audio we're about to ASR
-        check_data, check_sr = sf.read(asr_input, dtype="float32")
-        if len(check_data.shape) == 2:
-            check_data = check_data.mean(axis=1)
+        check_data, check_sr = _read_mono(asr_input)
         mx = float(np.abs(check_data).max())
         rms = float(np.sqrt(np.mean(check_data ** 2)))
         clipped_ratio = float(np.mean(np.abs(check_data) >= 0.99))

@@ -133,6 +133,21 @@ class BaseASR(ABC):
     def load_model(self):
         ...
 
+    def _transcribe_with_funasr(self, audio_path: str, language: str) -> list[dict]:
+        if self.model is None:
+            self.load_model()
+        from backend.app.config import settings
+        result = self.model.generate(
+            input=audio_path,
+            cache={},
+            language=language,
+            use_itn=True,
+            batch_size_s=settings.asr_batch_size_s,
+            merge_vad=settings.asr_merge_vad,
+            merge_length_s=settings.asr_merge_length_s,
+        )
+        return _parse_result(result)
+
     @abstractmethod
     def transcribe(self, audio_path: str, language: str = "zh") -> list[dict]:
         ...
@@ -165,19 +180,7 @@ class SenseVoiceASR(BaseASR):
         self.model = AutoModel(**kwargs)
 
     def transcribe(self, audio_path: str, language: str = "auto") -> list[dict]:
-        if self.model is None:
-            self.load_model()
-        from backend.app.config import settings
-        result = self.model.generate(
-            input=audio_path,
-            cache={},
-            language=language,
-            use_itn=True,
-            batch_size_s=settings.asr_batch_size_s,
-            merge_vad=settings.asr_merge_vad,
-            merge_length_s=settings.asr_merge_length_s,
-        )
-        return _parse_result(result)
+        return self._transcribe_with_funasr(audio_path, language)
 
     def unload(self):
         self.model = None
@@ -203,19 +206,7 @@ class ParaformerASR(BaseASR):
         )
 
     def transcribe(self, audio_path: str, language: str = "zh") -> list[dict]:
-        if self.model is None:
-            self.load_model()
-        from backend.app.config import settings
-        result = self.model.generate(
-            input=audio_path,
-            cache={},
-            language=language,
-            use_itn=True,
-            batch_size_s=settings.asr_batch_size_s,
-            merge_vad=settings.asr_merge_vad,
-            merge_length_s=settings.asr_merge_length_s,
-        )
-        return _parse_result(result)
+        return self._transcribe_with_funasr(audio_path, language)
 
     def unload(self):
         self.model = None
