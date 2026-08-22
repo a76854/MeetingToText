@@ -27,6 +27,18 @@ PIPELINE_STEPS = [
     ("asr", "执行语音识别与说话人分离 (ASR + CAM++)"),
 ]
 
+
+def format_transcript_text(segments, separator: str) -> str:
+    """Join transcript segments into plain text.
+
+    Each line is ``[speaker] text`` when a speaker is present, otherwise bare
+    ``text``. The separator differs by consumer: stored/rebuilt ``full_text``
+    uses ``"\\n\\n"``, TXT export uses a single ``"\\n"``.
+    """
+    return separator.join(
+        f"[{seg.speaker}] {seg.text}" if seg.speaker else seg.text for seg in segments
+    )
+
 pipeline_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="pipeline")
 
 _pipeline_futures: dict[str, Future] = {}
@@ -212,11 +224,7 @@ def run_pipeline(task_id: str):
             for s in segments_raw
         ]
 
-        full_text_parts = []
-        for seg in segments:
-            speaker_label = f"[{seg.speaker}] " if seg.speaker else ""
-            full_text_parts.append(f"{speaker_label}{seg.text}")
-        full_text = "\n\n".join(full_text_parts)
+        full_text = format_transcript_text(segments, "\n\n")
 
         result = TaskResult(
             segments=segments,

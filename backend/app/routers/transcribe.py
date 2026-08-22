@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend.app.services.pipeline import get_task, submit_pipeline
+from backend.app.services.pipeline import format_transcript_text, get_task, submit_pipeline
 from backend.app.services.store import get_store
 from backend.app.models.schemas import TaskStatus, TranscriptSegment
 
@@ -104,11 +104,7 @@ async def update_transcript(task_id: str, body: TranscriptUpdate):
         raise HTTPException(status_code=400, detail="只有已完成的任务才能编辑")
 
     segments = body.segments
-    parts = []
-    for seg in segments:
-        label = f"[{seg.speaker}] " if seg.speaker else ""
-        parts.append(f"{label}{seg.text}")
-    full_text = "\n\n".join(parts)
+    full_text = format_transcript_text(segments, "\n\n")
 
     get_store().update_segments(task_id, segments, full_text)
     return {"status": "ok", "task_id": task_id, "segment_count": len(segments)}

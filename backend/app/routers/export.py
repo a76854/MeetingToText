@@ -3,7 +3,7 @@ import io
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from backend.app.services.pipeline import get_task
+from backend.app.services.pipeline import format_transcript_text, get_task
 from backend.app.models.schemas import TaskStatus
 
 router = APIRouter(prefix="/api", tags=["export"])
@@ -22,11 +22,7 @@ def _format_timestamp_srt(seconds: float) -> str:
 def _export_txt(task) -> str:
     if not task.result:
         return ""
-    parts = []
-    for seg in task.result.segments:
-        label = f"[{seg.speaker}] " if seg.speaker else ""
-        parts.append(f"{label}{seg.text}")
-    return "\n".join(parts)
+    return format_transcript_text(task.result.segments, "\n")
 
 
 def _export_md(task) -> str:
