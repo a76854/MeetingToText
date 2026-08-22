@@ -8,10 +8,9 @@ import {
   NSwitch,
   NSpin,
   NAlert,
-  NIcon,
 } from 'naive-ui'
 import {
-  state, error, warning, timer, volume, elapsedSec,
+  state, error, warning, timer, volume,
   streamingAsrEnabled, liveText, liveStatus, liveError,
   startRecording, stopRecording, cancelRecording,
   loadSettings, toggleStreamingAsr,

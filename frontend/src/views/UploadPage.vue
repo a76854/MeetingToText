@@ -15,7 +15,6 @@ import { api } from '../api/client'
 
 const router = useRouter()
 const uploading = ref(false)
-const dragOver = ref(false)
 const message = useMessage()
 
 async function customRequest({ file, onFinish, onError }: UploadCustomRequestOptions) {

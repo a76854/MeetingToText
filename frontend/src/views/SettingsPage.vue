@@ -15,7 +15,6 @@ import {
   NSpace,
   NTag,
   NAlert,
-  NIcon,
   useMessage,
 } from 'naive-ui'
 import { api } from '../api/client'

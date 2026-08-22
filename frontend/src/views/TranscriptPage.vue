@@ -39,12 +39,6 @@ let audioEventsAttached = false
 let es: EventSource | null = null
 let isUnmounted = false
 
-const exportFormatOptions = [
-  { label: 'TXT', value: 'txt' },
-  { label: 'SRT 字幕', value: 'srt' },
-  { label: 'Markdown', value: 'md' },
-]
-
 onMounted(async () => {
   await loadTask()
   if (status.value === 'processing' || status.value === 'pending') {
@@ -267,7 +261,7 @@ function retryTranscribe() {
 
     <div v-if="status === 'processing' || status === 'pending'">
       <NCard>
-        <ProgressIndicator v-if="progress" :progress="progress" :task="{ status }" />
+        <ProgressIndicator v-if="progress" :progress="progress" />
         <NSpin v-else>
           <div style="text-align: center; padding: 24px;">正在处理转写，请稍候...</div>
         </NSpin>

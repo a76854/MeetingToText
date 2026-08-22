@@ -1,14 +1,14 @@
 import { ref } from 'vue'
 import { api } from '../api/client'
 
-export type RecorderState = 'idle' | 'preparing' | 'recording' | 'stopping' | 'cancelling' | 'done'
+type RecorderState = 'idle' | 'preparing' | 'recording' | 'stopping' | 'cancelling' | 'done'
 
 export const state = ref<RecorderState>('idle')
 export const taskId = ref('')
 export const error = ref('')
 export const timer = ref('00:00')
 export const volume = ref(0)
-export const elapsedSec = ref(0)
+const elapsedSec = ref(0)
 export const streamingAsrEnabled = ref(false)
 export const noiseSuppression = ref(true)
 export const audioSource = ref('mic')
@@ -43,7 +43,7 @@ function genTaskId(): string {
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
 }
 
-export function formatTime(s: number): string {
+function formatTime(s: number): string {
   const m = Math.floor(s / 60)
   const sec = Math.floor(s % 60)
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`

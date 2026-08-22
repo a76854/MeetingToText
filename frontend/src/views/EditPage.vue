@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, nextTick } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NAlert,
@@ -10,8 +10,6 @@ import {
   NInputNumber,
   NSpin,
   NEmpty,
-  NDivider,
-  NIcon,
   useMessage,
 } from 'naive-ui'
 import { api } from '../api/client'
@@ -75,14 +73,6 @@ async function saveEdits() {
     saving.value = false
   }
 }
-
-const speakers = computed(() => {
-  const set = new Set<string>()
-  for (const s of segments.value) {
-    if (s.speaker) set.add(s.speaker)
-  }
-  return Array.from(set)
-})
 </script>
 
 <template>

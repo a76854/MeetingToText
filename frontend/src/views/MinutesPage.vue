@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 import { marked } from 'marked'
 import {
   NCard,
@@ -16,7 +16,6 @@ import { api } from '../api/client'
 import { sanitizeHtml } from '../utils/sanitize'
 
 const route = useRoute()
-const router = useRouter()
 const message = useMessage()
 const dialog = useDialog()
 const taskId = route.params.taskId as string

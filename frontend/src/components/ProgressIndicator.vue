@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { NSteps, NStep, NProgress, NSpace, NText } from 'naive-ui'
+import { NSteps, NStep, NProgress } from 'naive-ui'
 
 const props = defineProps<{
   progress: { current_step: string; steps: { name: string; status: string; message: string }[]; overall: number } | null
-  task: any
 }>()
 
 const stepLabels: Record<string, string> = {
