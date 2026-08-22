@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, nextTick } from 'vue'
 import {
   NCard,
   NTabPane,
@@ -56,7 +56,16 @@ const apiKeySet = ref(false)
 const saving = ref(false)
 const error = ref('')
 
+// Guard for the programmatic settings load below. watch(asrModelType) uses
+// Vue's default flush: 'pre', which QUEUES its callback instead of running it
+// synchronously — the job is flushed in a later microtask, i.e. AFTER the
+// synchronous assignment block inside onMounted completes. Without this flag,
+// loading a saved custom asr_model_name / asr_needs_punc would be immediately
+// clobbered by the watcher's hardcoded defaults.
+let isLoadingSettings = false
+
 onMounted(async () => {
+  isLoadingSettings = true
   try {
     const s = await api.getSettings()
     llmBaseUrl.value = s.llm_base_url
@@ -78,12 +87,24 @@ onMounted(async () => {
     micEnabled.value = source.includes('mic')
     systemAudioEnabled.value = source.includes('system')
     apiKeySet.value = s.llm_api_key_set
+    // Wait until the pending pre-flush watcher queue (queued by the
+    // asrModelType assignment above) has drained before re-enabling the
+    // watcher. nextTick() resolves only after flushJobs runs the queued
+    // watcher callback, so the guard is guaranteed to still be `true` when
+    // that callback executes.
+    await nextTick()
   } catch (e: any) {
     error.value = e.message
+  } finally {
+    isLoadingSettings = false
   }
 })
 
 watch(asrModelType, (newType) => {
+  // Only auto-derive model name / punc when the USER switches the engine
+  // select. During programmatic load (onMounted) the saved values must win,
+  // so skip the default-override entirely.
+  if (isLoadingSettings) return
   const name = DEFAULT_ASR_MODEL[newType]
   if (name) asrModelName.value = name
   asrNeedsPunc.value = newType === 'paraformer'
