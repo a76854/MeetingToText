@@ -15,7 +15,7 @@ export const streamingAsrEnabled = ref(false)
 export const noiseSuppression = ref(true)
 export const audioSource = ref('mic')
 export const liveText = ref('')
-export const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error'>('idle')
+export const liveStatus = ref<'idle' | 'waiting' | 'active' | 'error' | 'reconnecting'>('idle')
 export const liveError = ref('')
 export const warning = ref('')
 
@@ -35,6 +35,31 @@ let mediaRecorder: MediaRecorder | null = null
 let recordedChunks: Blob[] = []
 let localMode = false
 
+// --- reconnect-resume (task-25/26) ---
+// Mid-recording disconnects no longer fall back to full localMode. Instead a gap
+// MediaRecorder captures the outage locally while a backoff loop reopens
+// /api/record/{task_id}; on reopen the server adopts the suspended session
+// ({"status":"resumed"}) and PCM streaming resumes. The retained gap blob is
+// uploaded as a SECOND task at stop (recording_{task_id}_gap.webm) — zero loss.
+let sampleRate = 0                       // captured once per session; re-sent as config after reconnect
+let reconnectTimer: number | null = null // pending backoff attempt
+let reconnectAttempt = 0                 // exponential backoff counter
+let reconnectStartedAt = 0               // Date.now() of first drop; drives give-up deadline
+let reconnecting = false                 // between first drop and successful reopen / give-up
+let probeSock: WebSocket | null = null   // in-flight reconnect socket (pre-open)
+let heartbeatInterval: number | null = null
+let gapRecorder: MediaRecorder | null = null
+let gapChunks: Blob[] = []
+let gapBlob: Blob | null = null          // retained outage audio; second task at stop
+
+const HEARTBEAT_MS = 10_000              // server liveness death = 3x grace; ping keeps it alive
+const RECONNECT_BASE_MS = 1000           // backoff: 1s -> 2s -> 4s ... capped at 5s
+const RECONNECT_MAX_MS = 5000
+// Matches the backend default reconnect_grace_seconds: past this the server has
+// finalized the suspended wav, so adopting would silently split the recording.
+const RECONNECT_GIVE_UP_MS = 60_000
+const STOP_DELIVER_TIMEOUT_MS = 3000     // bounded single-shot reconnect used when stopping mid-outage
+
 function genTaskId(): string {
   const buf = new Uint8Array(8)
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
@@ -43,6 +68,11 @@ function genTaskId(): string {
     for (let i = 0; i < buf.length; i++) buf[i] = Math.floor(Math.random() * 256)
   }
   return Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 12)
+}
+
+function wsUrl(id: string): string {
+  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${proto}//${window.location.host}/api/record/${id}`
 }
 
 function startTimer() {
@@ -132,16 +162,215 @@ function startVolumeMeter(an: AnalyserNode) {
   tick()
 }
 
-function setupLocalRecorder(s: MediaStream) {
-  const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+function pickWebmMime(): string {
+  return MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
     ? 'audio/webm;codecs=opus'
     : 'audio/webm'
-  mediaRecorder = new MediaRecorder(s, { mimeType: mime })
+}
+
+function setupLocalRecorder(s: MediaStream) {
+  mediaRecorder = new MediaRecorder(s, { mimeType: pickWebmMime() })
   recordedChunks = []
   mediaRecorder.ondataavailable = (e) => {
     if (e.data.size > 0) recordedChunks.push(e.data)
   }
   mediaRecorder.start(1000)
+}
+
+// --- heartbeat: {"type":"ping"} every 10s while the WS is open ---
+
+function startHeartbeat() {
+  stopHeartbeat()
+  heartbeatInterval = window.setInterval(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ type: 'ping' })) } catch {}
+    }
+  }, HEARTBEAT_MS)
+}
+
+function stopHeartbeat() {
+  if (heartbeatInterval) { clearInterval(heartbeatInterval); heartbeatInterval = null }
+}
+
+// --- gap capture: local MediaRecorder covering the outage window ---
+
+function startGapRecorder() {
+  if (gapRecorder || !stream) return
+  try {
+    gapChunks = []
+    gapRecorder = new MediaRecorder(stream, { mimeType: pickWebmMime() })
+    gapRecorder.ondataavailable = (e) => {
+      if (gapRecorder && e.data.size > 0) gapChunks.push(e.data)
+    }
+    gapRecorder.start(1000)
+  } catch { gapRecorder = null }
+}
+
+// Stop the gap recorder and RETAIN its audio: appended to gapBlob so repeated
+// outages in one session accumulate into one blob.
+async function finalizeGapCapture(): Promise<void> {
+  const rec = gapRecorder
+  if (!rec) return
+  gapRecorder = null
+  if (rec.state === 'recording') {
+    try { rec.requestData() } catch {}
+    await new Promise(r => setTimeout(r, 300))
+    try { rec.stop() } catch {}
+  }
+  if (gapChunks.length > 0) {
+    const part = new Blob(gapChunks, { type: 'audio/webm' })
+    gapBlob = gapBlob ? new Blob([gapBlob, part], { type: 'audio/webm' }) : part
+  }
+  gapChunks = []
+}
+
+function discardGap() {
+  if (gapRecorder && gapRecorder.state !== 'inactive') {
+    try { gapRecorder.stop() } catch {}
+  }
+  gapRecorder = null
+  gapChunks = []
+  gapBlob = null
+}
+
+// --- reconnect loop: exponential backoff until reopen or grace-expiry give-up ---
+
+function cancelReconnectLoop() {
+  if (reconnectTimer !== null) { clearTimeout(reconnectTimer); reconnectTimer = null }
+  if (probeSock && probeSock.readyState !== WebSocket.OPEN) {
+    try { probeSock.close() } catch {}
+  }
+  probeSock = null
+  reconnecting = false
+  reconnectStartedAt = 0
+  reconnectAttempt = 0
+}
+
+function scheduleReconnect(router: any) {
+  if (reconnectTimer !== null) return
+  if (Date.now() - reconnectStartedAt >= RECONNECT_GIVE_UP_MS) {
+    giveUpReconnect()
+    return
+  }
+  const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempt, RECONNECT_MAX_MS)
+  reconnectAttempt++
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null
+    if (state.value === 'recording') tryReconnect(router)
+  }, delay)
+}
+
+function giveUpReconnect() {
+  cancelReconnectLoop()
+  // Grace clearly expired server-side: adopting would split the recording.
+  // Keep the gap recorder running as plain local capture; stopRecording routes
+  // to the gap-upload path via the closed-WS branch.
+  liveStatus.value = 'error'
+  liveError.value = '重连失败，已转为本地录制；停止后将保存断线期间的录音'
+}
+
+function handleConnectionLost(router: any) {
+  if (state.value !== 'recording') return
+  stopHeartbeat()
+  ws = null
+  startGapRecorder()
+  if (reconnecting) {
+    scheduleReconnect(router)
+    return
+  }
+  reconnecting = true
+  reconnectAttempt = 0
+  reconnectStartedAt = Date.now()
+  liveStatus.value = 'reconnecting'
+  liveError.value = '网络已断开，正在重连…'
+  scheduleReconnect(router)
+}
+
+function adoptSocket(sock: WebSocket, router: any, resume: boolean) {
+  ws = sock
+  probeSock = null
+  attachWsHandlers(router)
+  try { sock.send(JSON.stringify({ type: 'config', sample_rate: sampleRate })) } catch {}
+  if (resume) {
+    startHeartbeat()
+    reconnecting = false
+    reconnectStartedAt = 0
+    reconnectAttempt = 0
+    liveError.value = ''
+    liveStatus.value = streamingAsrEnabled.value ? 'waiting' : 'idle'
+    void finalizeGapCapture()
+  } else {
+    // Stopping mid-outage: hand {"action":"stop"} over now so the server
+    // finalizes the pre-disconnect wav immediately; "done" (and the gap
+    // upload) arrive through attachWsHandlers.
+    try { sock.send(JSON.stringify({ action: 'stop' })) } catch {}
+  }
+}
+
+function tryReconnect(router: any) {
+  if (state.value !== 'recording') return
+  let sock: WebSocket
+  try { sock = new WebSocket(wsUrl(taskId.value)) } catch { scheduleReconnect(router); return }
+  sock.binaryType = 'arraybuffer'
+  probeSock = sock
+  sock.onopen = () => {
+    if (state.value === 'stopping') {
+      adoptSocket(sock, router, false)
+      return
+    }
+    if (state.value !== 'recording') {
+      try { sock.close() } catch {}
+      return
+    }
+    adoptSocket(sock, router, true)
+  }
+  sock.onclose = () => {
+    if (probeSock === sock) probeSock = null
+    handleConnectionLost(router)
+  }
+  sock.onerror = () => { handleConnectionLost(router) }
+}
+
+// Single bounded reconnect used by stopRecording when the WS is already down:
+// resolves true once the stop intent was delivered (done/error then flow
+// through attachWsHandlers), false if the server stayed unreachable.
+function tryDeliverStop(router: any): Promise<boolean> {
+  return new Promise((resolve) => {
+    let settled = false
+    const settle = (v: boolean) => { if (!settled) { settled = true; resolve(v) } }
+    let sock: WebSocket
+    try { sock = new WebSocket(wsUrl(taskId.value)) } catch { settle(false); return }
+    sock.binaryType = 'arraybuffer'
+    const failT = window.setTimeout(() => {
+      if (!settled) { try { sock.close() } catch {} }
+    }, STOP_DELIVER_TIMEOUT_MS)
+    sock.onopen = () => {
+      clearTimeout(failT)
+      if (settled) { try { sock.close() } catch {}; return }
+      adoptSocket(sock, router, false)
+      settle(true)
+    }
+    sock.onclose = () => { clearTimeout(failT); settle(false) }
+    sock.onerror = () => {}
+  })
+}
+
+// Upload the outage-gap webm as its own task (used when the main wav cannot be
+// finalized with us, e.g. stop while unreachable past every retry).
+async function uploadGapTask(blob: Blob, router?: any): Promise<void> {
+  const name = `recording_${taskId.value}_gap.webm`
+  try {
+    const res = await api.upload(new File([blob], name, { type: 'audio/webm' }))
+    if (router) {
+      state.value = 'done'
+      await new Promise(r => setTimeout(r, 500))
+      router.push(`/transcript/${res.task_id}`)
+      state.value = 'idle'
+    }
+  } catch {
+    error.value = '上传录音失败，已保存到本地下载'
+    downloadBlob(name, blob)
+  }
 }
 
 function teardownAudioGraph() {
@@ -178,10 +407,14 @@ function clearTimeouts() {
 function resetAll() {
   stopTimer()
   clearTimeouts()
+  cancelReconnectLoop()
+  stopHeartbeat()
   closeWs()
+  discardGap()
   teardownAudio()
   releaseWakeLock()
   localMode = false
+  sampleRate = 0
   recordedChunks = []
   if (beforeUnloadHandler) {
     window.removeEventListener('beforeunload', beforeUnloadHandler)
@@ -206,35 +439,55 @@ function attachWsHandlers(router: any) {
         if (msg.final) {
           liveStatus.value = 'idle'
         }
+      } else if (msg.status === 'resumed') {
+        // Server adopted the suspended session after our reconnect.
+        liveError.value = ''
+        liveStatus.value = streamingAsrEnabled.value ? 'active' : 'idle'
       } else if (msg.status === 'done') {
+        const mainTaskId: string = msg.task_id || ''
+        const gapToUpload = gapBlob
         resetAll()
         state.value = 'done'
-        if (msg.task_id) {
+        let navId = mainTaskId
+        if (gapToUpload && gapToUpload.size > 0) {
+          // Outage audio captured locally becomes a SECOND task (zero loss);
+          // navigation goes to the main wav task without waiting on it.
+          const gapId = mainTaskId || taskId.value
+          api.upload(new File([gapToUpload], `recording_${gapId}_gap.webm`, { type: 'audio/webm' }))
+            .catch(() => { warning.value = '断线期间录音上传失败，该段未保存' })
+        }
+        if (navId) {
           await new Promise(r => setTimeout(r, 500))
-          router.push(`/transcript/${msg.task_id}`)
+          router.push(`/transcript/${navId}`)
         }
         state.value = 'idle'
+      } else if (msg.status === 'error' && msg.code === 'session_busy') {
+        // Second concurrent WS for this task. While reconnecting this is just
+        // a stale owner: retry on the next backoff tick. Otherwise fatal.
+        if (reconnecting) {
+          try { ws?.close() } catch {}
+          ws = null
+        } else {
+          error.value = msg.message || '录音会话被占用'
+          resetAll()
+          state.value = 'idle'
+        }
       } else if (msg.status === 'error') {
-        state.value = 'idle'
-        error.value = msg.message || '服务器处理失败'
+        const gapSalvage = gapBlob
         resetAll()
+        state.value = 'idle'
+        if (gapSalvage && gapSalvage.size > 0) {
+          warning.value = '服务器处理失败，已改为保存断线期间的本地录音'
+          void uploadGapTask(gapSalvage, router)
+        } else {
+          error.value = msg.message || '服务器处理失败'
+        }
       }
+      // {"status":"discarded"} needs no client action (cancel path).
     } catch {}
   }
-  ws.onclose = () => {
-    if (state.value === 'recording' || state.value === 'stopping') {
-      if (!localMode && stream) {
-        localMode = true
-        setupLocalRecorder(stream)
-      }
-    }
-  }
-  ws.onerror = () => {
-    if (state.value === 'recording' && !localMode && stream) {
-      localMode = true
-      setupLocalRecorder(stream)
-    }
-  }
+  ws.onclose = () => { handleConnectionLost(router) }
+  ws.onerror = () => { handleConnectionLost(router) }
 }
 
 export async function startRecording(router: any) {
@@ -245,14 +498,14 @@ export async function startRecording(router: any) {
   liveText.value = ''
   liveStatus.value = streamingAsrEnabled.value ? 'waiting' : 'idle'
   liveError.value = ''
+  cancelReconnectLoop()
+  stopHeartbeat()
+  discardGap()
 
   const newTaskId = genTaskId()
   taskId.value = newTaskId
 
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${proto}//${window.location.host}/api/record/${newTaskId}`
-
-  ws = new WebSocket(wsUrl)
+  ws = new WebSocket(wsUrl(newTaskId))
   ws.binaryType = 'arraybuffer'
 
   let openResolve!: () => void
@@ -371,6 +624,7 @@ export async function startRecording(router: any) {
   if (!localMode) {
     try {
       await setupAudioWorklet(stream)
+      sampleRate = audioCtx?.sampleRate || 0
     } catch (e) {
       teardownAudioGraph()
       closeWs()
@@ -393,10 +647,17 @@ export async function startRecording(router: any) {
   await acquireWakeLock()
 
   beforeUnloadHandler = (e: BeforeUnloadEvent) => {
+    // Best-effort: finalize the server-side wav immediately on tab close
+    // instead of waiting out the full reconnect grace.
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      try { ws.send(JSON.stringify({ action: 'stop' })) } catch {}
+    }
     e.preventDefault()
     e.returnValue = ''
   }
   window.addEventListener('beforeunload', beforeUnloadHandler)
+
+  if (!localMode) startHeartbeat()
 
   state.value = 'recording'
   startTimer()
@@ -440,13 +701,36 @@ export async function stopRecording(router?: any) {
   }
 
   if (!ws || ws.readyState !== WebSocket.OPEN) {
-    state.value = 'idle'
-    error.value = '连接已断开'
-    resetAll()
+    // Stop pressed during an outage: capture the gap audio, then make ONE
+    // bounded reconnect attempt to deliver {"action":"stop"} so the
+    // pre-disconnect wav finalizes NOW (task_id returns via "done" and the gap
+    // uploads as a second task). If unreachable, upload the gap webm alone;
+    // the server grace-finalizes the suspended part into its own task.
+    state.value = 'stopping'
+    stopTimer()
+    cancelReconnectLoop()
+    stopHeartbeat()
+    await finalizeGapCapture()
+    teardownAudio()
+    releaseWakeLock()
+    const delivered = await tryDeliverStop(router)
+    if (!delivered) {
+      const gap = gapBlob
+      gapBlob = null
+      if (gap && gap.size > 0) {
+        await uploadGapTask(gap, router)
+      } else {
+        error.value = '连接已断开且无可用录音内容'
+        state.value = 'idle'
+      }
+    }
     return
   }
+
   state.value = 'stopping'
   stopTimer()
+  cancelReconnectLoop()
+  await finalizeGapCapture()
   teardownAudio()
   try {
     ws.send(JSON.stringify({ action: 'stop' }))
@@ -462,6 +746,9 @@ export function cancelRecording() {
   state.value = 'cancelling'
   stopTimer()
   clearTimeouts()
+  cancelReconnectLoop()
+  stopHeartbeat()
+  discardGap()
   teardownAudio()
   if (ws) {
     if (ws.readyState === WebSocket.OPEN) {
@@ -469,6 +756,15 @@ export function cancelRecording() {
     }
     try { ws.close() } catch {}
     ws = null
+  }
+  // A suspended session may exist server-side after a disconnect; discard it
+  // via REST so the grace timer never finalizes it into a task.
+  if (taskId.value) {
+    try { fetch(`/api/record/${taskId.value}`, { method: 'DELETE' }).catch(() => {}) } catch {}
+  }
+  if (beforeUnloadHandler) {
+    window.removeEventListener('beforeunload', beforeUnloadHandler)
+    beforeUnloadHandler = null
   }
   releaseWakeLock()
   setTimeout(() => {

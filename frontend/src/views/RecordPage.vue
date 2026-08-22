@@ -86,7 +86,6 @@ onMounted(async () => {
             <p v-if="liveText" class="live-text">{{ liveText }}<span class="cursor">▍</span></p>
             <p v-else-if="liveStatus === 'waiting'" class="live-empty">正在启动实时转录，请稍候...</p>
             <p v-else class="live-empty">聆听中...</p>
-            <p v-if="liveError" class="live-empty error">{{ liveError }}</p>
           </div>
         </div>
 
@@ -156,6 +155,15 @@ onMounted(async () => {
           style="cursor: pointer; max-width: 100%;"
         >
           ⚠ {{ warning }}
+        </NAlert>
+
+        <NAlert
+          v-if="liveError && (state === 'recording' || state === 'stopping')"
+          type="warning"
+          @click="liveError = ''"
+          style="cursor: pointer; max-width: 100%;"
+        >
+          {{ liveError }}
         </NAlert>
 
         <p v-if="state === 'idle'" style="font-size: 12px; color: #999; text-align: center; max-width: 360px;">
@@ -253,6 +261,7 @@ onMounted(async () => {
   flex-shrink: 0;
 }
 .live-dot.waiting { background: #f9ab00; animation: none; }
+.live-dot.reconnecting { background: #f9ab00; animation: none; }
 @keyframes pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.3; transform: scale(0.85); }
