@@ -113,17 +113,18 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
             audio_data, original_sr = librosa.load(audio_path, sr=None, mono=True)
 
     duration = len(audio_data) / original_sr
+    target_sr = settings.target_sr
 
-    if original_sr == 16000:
+    if original_sr == target_sr:
         return audio_path, original_sr, duration
 
     logger.info(
-        f"Resampling {original_sr}Hz -> 16000Hz ({duration:.1f}s)"
+        f"Resampling {original_sr}Hz -> {target_sr}Hz ({duration:.1f}s)"
     )
-    resampled = librosa.resample(audio_data, orig_sr=original_sr, target_sr=16000)
+    resampled = librosa.resample(audio_data, orig_sr=original_sr, target_sr=target_sr)
     fd, tmp_path = tempfile.mkstemp(prefix="asr_16k_", suffix=".wav", dir=settings.temp_dir)
     os.close(fd)
-    sf.write(tmp_path, resampled, 16000, subtype="PCM_16")
+    sf.write(tmp_path, resampled, target_sr, subtype="PCM_16")
     return tmp_path, original_sr, duration
 
 

@@ -3,6 +3,8 @@ import logging
 import numpy as np
 import librosa
 
+from backend.app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -16,7 +18,7 @@ class StreamingASRSession:
     # chunk_size = [0, 10, 5] -> 10*960 = 9600 samples = 600ms at 16kHz
     CHUNK_SIZE = [0, 10, 5]
     CHUNK_STRIDE_16K = CHUNK_SIZE[1] * 960  # 9600 samples
-    TARGET_SR = 16000
+    TARGET_SR = settings.target_sr
     RESAMPLE_OVERLAP = 256  # input samples to overlap between resamples, for boundary continuity
 
     def __init__(self, model, input_sample_rate: int):

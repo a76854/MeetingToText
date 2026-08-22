@@ -17,6 +17,10 @@ const router = useRouter()
 const uploading = ref(false)
 const message = useMessage()
 
+// 上传大小上限（MB）——唯一出处，校验与提示文案均引用此常量
+const MAX_UPLOAD_MB = 500
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
+
 async function customRequest({ file, onFinish, onError }: UploadCustomRequestOptions) {
   if (file.file) {
     uploading.value = true
@@ -44,9 +48,8 @@ async function customRequest({ file, onFinish, onError }: UploadCustomRequestOpt
 
 function onBeforeUpload({ file }: { file: UploadFileInfo }) {
   if (file.file) {
-    const maxSize = 500 * 1024 * 1024
-    if (file.file.size > maxSize) {
-      message.error('文件超过 500MB 限制')
+    if (file.file.size > MAX_UPLOAD_BYTES) {
+      message.error(`文件超过 ${MAX_UPLOAD_MB}MB 限制`)
       return false
     }
   }
@@ -74,7 +77,7 @@ function onBeforeUpload({ file }: { file: UploadFileInfo }) {
               <div style="font-size: 48px; color: #1a73e8; line-height: 1; margin-bottom: 12px;">+</div>
               <NText style="font-size: 15px;">点击或拖拽文件到此区域上传</NText>
               <br />
-              <NText depth="3" style="font-size: 12px;">限 500MB 以内</NText>
+              <NText depth="3" style="font-size: 12px;">限 {{ MAX_UPLOAD_MB }}MB 以内</NText>
             </div>
           </NUploadDragger>
         </NUpload>

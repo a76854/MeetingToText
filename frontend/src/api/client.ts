@@ -109,10 +109,10 @@ export const api = {
 
   getTemplates: (): Promise<{ templates: TemplateInfo[] }> => request('/templates'),
 
-  generateMinutes: (task_id: string, template_id: string, custom_instructions = '', force = false): Promise<{ minutes: string }> =>
+  generateMinutes: (task_id: string, template_id: string, custom_instructions = ''): Promise<{ minutes: string }> =>
     request('/generate', {
       method: 'POST',
-      body: JSON.stringify({ task_id, template_id, custom_instructions, force }),
+      body: JSON.stringify({ task_id, template_id, custom_instructions }),
     }),
 
   updateMinutes: (task_id: string, minutes: string): Promise<{ minutes: string }> =>
