@@ -16,7 +16,7 @@
 | ASR + 说话人分离 | FunASR (SenseVoice + CAM++) |
 | 纪要生成 | OpenAI 兼容 API（DeepSeek / OpenAI / Ollama 等） |
 | 后端 | FastAPI + SSE + WebSocket |
-| 前端 | Vue 3 + Vite + TypeScript + Pinia |
+| 前端 | Vue 3 + Vite + TypeScript |
 
 ## 快速开始
 
@@ -42,8 +42,6 @@ python main.py
 
 首次启动后，进入「**设置**」页面填入 LLM API Key 并保存（设置保存在 SQLite 数据库中）。
 
-> 兼容旧版本：如项目根目录存在 `.env` 文件，首次启动会自动迁移到 DB 并打印提示，可随后删除 `.env`。
-
 开发模式（前端热更新）：
 
 ```bash
@@ -61,7 +59,7 @@ cd frontend && npm run dev
 2. **实时录音**：使用浏览器麦克风录制会议
 3. **自动转写**：系统自动执行 VAD → ASR + 说话人分离
 4. **校对转录**：查看 / 编辑带说话人标签的转写结果
-5. **生成纪要**：选择模板 → LLM 生成会议纪要 → 导出 TXT / SRT / VTT / Markdown
+5. **生成纪要**：选择模板 → LLM 生成会议纪要 → 导出 TXT / SRT / Markdown
 
 ## 配置项
 

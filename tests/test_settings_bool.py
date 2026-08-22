@@ -79,3 +79,20 @@ def test_get_parses_legacy_capitalized_bool_rows(client):
 
     assert info["browser_noise_suppression"] is True
     assert info["asr_merge_vad"] is False
+
+
+def test_post_asr_model_type_derives_needs_punc(client):
+    # C8: asr_needs_punc has exactly one rule — derived from asr_model_type
+    # by the POST setdefault. A payload WITHOUT asr_needs_punc must still
+    # persist the correct flag ("true" for paraformer, "false" otherwise).
+    store = get_store()
+
+    resp = client.post("/api/settings", json={"asr_model_type": "sensevoice"})
+    assert resp.status_code == 200
+    assert store.get_setting("asr_needs_punc") == "false"
+    assert settings.asr_needs_punc is False
+
+    resp = client.post("/api/settings", json={"asr_model_type": "paraformer"})
+    assert resp.status_code == 200
+    assert store.get_setting("asr_needs_punc") == "true"
+    assert settings.asr_needs_punc is True

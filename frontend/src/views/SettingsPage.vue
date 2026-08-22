@@ -32,23 +32,26 @@ const asrModelTypeOptions = [
 
 const message = useMessage()
 
+// C7: refs start neutral — real values load from GET /api/settings on mount,
+// whose defaults derive from backend/app/config.py. Do not re-hardcode
+// config defaults here; config.py is the single source of truth.
 const llmBaseUrl = ref('')
 const llmApiKey = ref('')
 const llmModel = ref('')
-const llmTemperature = ref(0.3)
-const llmMaxTokens = ref(4096)
-const asrModelType = ref('sensevoice')
-const asrModelName = ref('iic/SenseVoiceSmall')
+const llmTemperature = ref(0)
+const llmMaxTokens = ref(0)
+const asrModelType = ref('')
+const asrModelName = ref('')
 const asrNeedsPunc = ref(false)
 const ncpu = ref(0)
-const asrBatchSizeS = ref(300)
-const asrMergeLengthS = ref(15)
-const asrMergeVad = ref(true)
-const asrMaxSingleSegmentTime = ref(60000)
+const asrBatchSizeS = ref(0)
+const asrMergeLengthS = ref(0)
+const asrMergeVad = ref(false)
+const asrMaxSingleSegmentTime = ref(0)
 const streamingAsrEnabled = ref(false)
-const streamingAsrModelName = ref('paraformer-zh-streaming')
-const noiseSuppression = ref(true)
-const micEnabled = ref(true)
+const streamingAsrModelName = ref('')
+const noiseSuppression = ref(false)
+const micEnabled = ref(false)
 const systemAudioEnabled = ref(false)
 const maxCpu = navigator.hardwareConcurrency || 16
 const apiKeySet = ref(false)
@@ -72,7 +75,7 @@ onMounted(async () => {
     llmTemperature.value = s.llm_temperature
     llmMaxTokens.value = s.llm_max_tokens
     asrModelType.value = s.asr_model_type
-    asrModelName.value = s.asr_model_name || 'iic/SenseVoiceSmall'
+    asrModelName.value = s.asr_model_name
     asrNeedsPunc.value = s.asr_needs_punc
     ncpu.value = s.ncpu
     asrBatchSizeS.value = s.asr_batch_size_s
@@ -80,9 +83,9 @@ onMounted(async () => {
     asrMergeVad.value = s.asr_merge_vad
     asrMaxSingleSegmentTime.value = s.asr_max_single_segment_time
     streamingAsrEnabled.value = s.streaming_asr_enabled
-    streamingAsrModelName.value = s.streaming_asr_model_name || 'paraformer-zh-streaming'
+    streamingAsrModelName.value = s.streaming_asr_model_name
     noiseSuppression.value = s.browser_noise_suppression
-    const source = s.audio_source || 'mic'
+    const source = s.audio_source
     micEnabled.value = source.includes('mic')
     systemAudioEnabled.value = source.includes('system')
     apiKeySet.value = s.llm_api_key_set
@@ -100,6 +103,10 @@ onMounted(async () => {
 })
 
 watch(asrModelType, (newType) => {
+  // UI-display only: mirrors what the backend will derive on save
+  // (settings.py POST: asr_needs_punc = (model_type == "paraformer")).
+  // The SAVE payload must NOT send asr_needs_punc — the backend setdefault
+  // is the sole authority, so this value is never persisted from here.
   // Only auto-derive model name / punc when the USER switches the engine
   // select. During programmatic load (onMounted) the saved values must win,
   // so skip the default-override entirely.
@@ -128,7 +135,8 @@ async function saveSettings() {
       llm_max_tokens: llmMaxTokens.value,
       asr_model_type: asrModelType.value,
       asr_model_name: asrModelName.value,
-      asr_needs_punc: asrNeedsPunc.value,
+      // C8: asr_needs_punc deliberately omitted — backend derives it from
+      // asr_model_type (settings.py POST setdefault) and is authoritative.
       ncpu: ncpu.value,
       asr_batch_size_s: asrBatchSizeS.value,
       asr_merge_length_s: asrMergeLengthS.value,

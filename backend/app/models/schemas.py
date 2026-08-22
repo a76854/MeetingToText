@@ -93,21 +93,23 @@ class SettingsUpdate(BaseModel):
     audio_source: str | None = None
 
 
+# C7: response model only — GET /settings populates every field from
+# backend/app/config.py, so no inline defaults here (they would drift).
 class SettingsInfo(BaseModel):
     llm_base_url: str
     llm_model: str
-    llm_api_key_set: bool = False
-    llm_temperature: float = 0.3
-    llm_max_tokens: int = 4096
+    llm_api_key_set: bool
+    llm_temperature: float
+    llm_max_tokens: int
     asr_model_type: str
-    asr_model_name: str = "iic/SenseVoiceSmall"
-    asr_needs_punc: bool = False
-    ncpu: int = 0
-    asr_batch_size_s: int = 300
-    asr_merge_length_s: float = 15.0
-    asr_merge_vad: bool = True
-    asr_max_single_segment_time: int = 60000
-    streaming_asr_enabled: bool = False
-    streaming_asr_model_name: str = "paraformer-zh-streaming"
-    browser_noise_suppression: bool = True
-    audio_source: str = "mic"
+    asr_model_name: str
+    asr_needs_punc: bool
+    ncpu: int
+    asr_batch_size_s: int
+    asr_merge_length_s: float
+    asr_merge_vad: bool
+    asr_max_single_segment_time: int
+    streaming_asr_enabled: bool
+    streaming_asr_model_name: str
+    browser_noise_suppression: bool
+    audio_source: str
