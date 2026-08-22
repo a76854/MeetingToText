@@ -6,7 +6,7 @@ dist/
 wheels/
 *.egg-info
 .venv/
-
+.omo
 # Frontend
 frontend/dist/
 frontend/node_modules/
