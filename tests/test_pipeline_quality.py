@@ -38,13 +38,19 @@ from backend.app.services.store import get_store
 from backend.app.services import pipeline
 from backend.app.models.schemas import TaskInfo, TaskStatus
 
-# Magic thresholds under test (todo 17 will name these constants WITHOUT
-# changing their values — these tests are the referee).
-MIN_DURATION_S = 0.5          # pipeline.py:184
-SILENCE_AMPLITUDE = 0.005     # pipeline.py:186
-CLIP_ABS_LIMIT = 0.99         # pipeline.py:176
-CLIP_RATIO_LIMIT = 0.1        # pipeline.py:188
-PROGRESS_OVERALLS = [0.0, 0.3, 0.35, 0.8, 1.0]  # pipeline.py:194-216
+# Magic thresholds under test — aliases to the product constants (todo 17
+# named them without changing values; these tests remain the referee).
+MIN_DURATION_S = pipeline.MIN_DURATION_S
+SILENCE_AMPLITUDE = pipeline.SILENCE_AMPLITUDE_THRESHOLD
+CLIP_ABS_LIMIT = pipeline.CLIP_ABS_LIMIT
+CLIP_RATIO_LIMIT = pipeline.CLIP_RATIO_LIMIT
+PROGRESS_OVERALLS = [
+    pipeline.PROGRESS_INITIAL,
+    pipeline.PROGRESS_AFTER_VAD_RUNNING,
+    pipeline.PROGRESS_AFTER_ASR_RUNNING,
+    pipeline.PROGRESS_AFTER_VAD_DONE,
+    pipeline.PROGRESS_COMPLETE,
+]
 
 
 # ---------------------------------------------------------------- fixtures
