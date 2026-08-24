@@ -13,8 +13,8 @@ import {
   useMessage,
 } from 'naive-ui'
 import { api } from '../api/client'
-import { copyText } from '../utils/clipboard'
-import { downloadBlob } from '../utils/download'
+import { copyWithFeedback } from '../utils/clipboard'
+import { downloadText } from '../utils/download'
 
 const route = useRoute()
 const router = useRouter()
@@ -61,17 +61,15 @@ async function doGenerate() {
   }
 }
 
-async function copyToClipboard() {
-  if (await copyText(minutes.value)) {
-    message.success('已复制到剪贴板')
-  } else {
-    message.error('复制失败')
-  }
+function copyToClipboard() {
+  copyWithFeedback(minutes.value, message)
 }
 
+// Downloads the minutes currently on screen. The backend /api/export endpoint
+// is transcript-only (see backend/app/services/exporters.py `_export_md`), so
+// exporting from here routes through the in-memory minutes instead (todo 19).
 function downloadMarkdown() {
-  const url = api.exportUrl(taskId, 'md')
-  fetch(url).then(r => r.blob()).then(blob => downloadBlob('', blob))
+  downloadText(`纪要-${taskId}.md`, minutes.value)
 }
 </script>
 
@@ -129,7 +127,7 @@ function downloadMarkdown() {
     <NCard v-if="minutes" title="生成结果">
       <template #header-extra>
         <NSpace>
-          <NButton size="small" @click="downloadMarkdown" ghost>下载 .md</NButton>
+          <NButton size="small" @click="downloadMarkdown" ghost>下载纪要 .md</NButton>
           <NButton size="small" @click="copyToClipboard" ghost>复制</NButton>
         </NSpace>
       </template>

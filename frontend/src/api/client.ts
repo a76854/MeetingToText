@@ -84,6 +84,9 @@ export const api = {
   deleteTask: (id: string): Promise<{ status: string; task_id: string }> =>
     request(`/task/${id}`, { method: 'DELETE' }),
 
+  deleteRecordingSession: (taskId: string): Promise<{ status: string }> =>
+    request(`/record/${taskId}`, { method: 'DELETE' }),
+
   startTranscribe: (id: string): Promise<{ status: string; task_id: string }> =>
     request(`/transcribe/${id}`, { method: 'POST' }),
 
