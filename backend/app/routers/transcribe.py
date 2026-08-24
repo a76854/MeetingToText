@@ -6,8 +6,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from backend.app.services.pipeline import format_transcript_text, get_task, submit_pipeline
-from backend.app.services.store import get_store
+from backend.app.services.pipeline import format_transcript_text, submit_pipeline
+from backend.app.services.store import get_store, get_task
 from backend.app.models.schemas import TaskStatus, TranscriptSegment
 
 router = APIRouter(prefix="/api", tags=["transcribe"])

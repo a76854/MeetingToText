@@ -1,6 +1,6 @@
 """Regression tests for boolean setting storage/parsing/defaults (C1+C2+C3).
 
-- C1: _BOOL_FIELDS covers all four bool keys (matches server.py _BOOL_KEYS).
+- C1: _BOOL_FIELDS covers all four bool keys (matches startup.py _BOOL_KEYS).
 - C3: POSTed bools are stored in app_settings as lowercase "true"/"false",
   never Python's capitalized "True"/"False".
 - C2: GET /settings derives bool defaults from the runtime settings object,

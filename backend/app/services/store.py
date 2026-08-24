@@ -223,3 +223,13 @@ def get_store() -> TaskStore:
             if _store is None:
                 _store = TaskStore(settings.db_path)
     return _store
+
+
+def get_task(task_id: str) -> TaskInfo | None:
+    """Task-read facade so pure-read routers don't import the pipeline executor."""
+    return get_store().get(task_id)
+
+
+def create_task(filename: str, audio_path: str) -> TaskInfo:
+    """Task-create facade so upload/record routers don't import the pipeline executor."""
+    return get_store().create(TaskInfo(filename=filename, audio_path=audio_path))

@@ -10,7 +10,8 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.app.config import settings
 from backend.app.services.recorder import recorder_manager
-from backend.app.services.pipeline import create_task, submit_pipeline
+from backend.app.services.pipeline import submit_pipeline
+from backend.app.services.store import create_task
 from backend.app.services.asr_streaming import StreamingASR
 
 router = APIRouter(prefix="/api", tags=["record"])

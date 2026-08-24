@@ -11,7 +11,6 @@ logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 from backend.app.models.schemas import (
-    TaskInfo,
     TaskStatus,
     StepInfo,
     ProgressInfo,
@@ -80,15 +79,6 @@ def _initial_progress() -> ProgressInfo:
         steps=[StepInfo(name=name, status="pending", message=desc) for name, desc in PIPELINE_STEPS],
         overall=0.0,
     )
-
-
-def get_task(task_id: str) -> TaskInfo | None:
-    return get_store().get(task_id)
-
-
-def create_task(filename: str, audio_path: str) -> TaskInfo:
-    task = TaskInfo(filename=filename, audio_path=audio_path)
-    return get_store().create(task)
 
 
 def _read_mono(path: str) -> tuple[np.ndarray, int]:

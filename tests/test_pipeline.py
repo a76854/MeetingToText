@@ -124,7 +124,8 @@ def test_asr_service():
 
 
 def test_full_pipeline():
-    from backend.app.services.pipeline import create_task, run_pipeline, get_task
+    from backend.app.services.pipeline import run_pipeline
+    from backend.app.services.store import create_task, get_task
 
     speech_file, dur, sr = _find_speech_file()
     if not speech_file:

@@ -4,8 +4,8 @@ import uuid
 from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from backend.app.config import settings
-from backend.app.services.pipeline import create_task, get_task, cancel_pipeline
-from backend.app.services.store import get_store
+from backend.app.services.pipeline import cancel_pipeline
+from backend.app.services.store import create_task, get_store, get_task
 from backend.app.models.schemas import UploadResponse, TaskInfo
 
 router = APIRouter(prefix="/api", tags=["upload"])

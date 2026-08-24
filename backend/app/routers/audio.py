@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from backend.app.services.pipeline import get_task
+from backend.app.services.store import get_task
 
 router = APIRouter(prefix="/api", tags=["audio"])
 

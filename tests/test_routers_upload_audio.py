@@ -33,7 +33,7 @@ import backend.app.routers.audio as audio_module
 import backend.app.routers.upload as upload_module
 import backend.app.services.store as store_module
 from backend.app.config import settings
-from backend.app.services.pipeline import create_task, get_task
+from backend.app.services.store import create_task, get_task
 
 # upload.py:13 — extension filter table. Driven from the module constant so
 # the test tracks the source of truth instead of re-inventing it.

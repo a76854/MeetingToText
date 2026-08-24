@@ -211,5 +211,5 @@ def test_delete_route_discards_session_and_404s_when_absent():
 
 def test_config_default_and_server_key_registry():
     assert settings.reconnect_grace_seconds == 60
-    from backend.app.server import _USER_SETTING_KEYS
+    from backend.app.startup import _USER_SETTING_KEYS
     assert _USER_SETTING_KEYS.get("reconnect_grace_seconds") is int
