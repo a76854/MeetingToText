@@ -1,8 +1,10 @@
 import os
 from abc import ABC, abstractmethod
 from typing import Optional
-import re
 import threading
+
+from backend.app.services.asr_parse import parse_result
+from backend.app.services.asr_patch import apply_funasr_distribute_spk_patch
 
 
 def _resolve_ncpu(setting: int | None) -> int:
@@ -12,120 +14,8 @@ def _resolve_ncpu(setting: int | None) -> int:
     return min(setting, max_ncpu)
 
 
-def _patch_funasr_distribute_spk() -> None:
-    try:
-        import funasr.models.campplus.utils as _utils
-    except Exception:
-        return
-    if getattr(_utils.distribute_spk, "_mt_patched", False):
-        return
-
-    def _safe_distribute_spk(sentence_list, sd_time_list):
-        cleaned = []
-        for entry in sd_time_list:
-            if not entry:
-                continue
-            st, ed, spk = entry[0], entry[1], entry[2] if len(entry) > 2 else 0
-            if st is None or ed is None:
-                continue
-            cleaned.append((float(st) * 1000.0, float(ed) * 1000.0, spk))
-
-        if not cleaned:
-            for d in sentence_list:
-                d["spk"] = 0
-            return sentence_list
-
-        for d in sentence_list:
-            sentence_start = d.get("start")
-            sentence_end = d.get("end")
-            if sentence_start is None or sentence_end is None:
-                d["spk"] = 0
-                continue
-            sentence_spk = 0
-            max_overlap = 0
-            for spk_st, spk_ed, spk in cleaned:
-                try:
-                    overlap = max(min(sentence_end, spk_ed) - max(sentence_start, spk_st), 0)
-                except TypeError:
-                    continue
-                if overlap > max_overlap:
-                    max_overlap = overlap
-                    sentence_spk = spk
-            d["spk"] = int(sentence_spk)
-        return sentence_list
-
-    _safe_distribute_spk._mt_patched = True
-    _utils.distribute_spk = _safe_distribute_spk
-    try:
-        import funasr.auto.auto_model as _am
-        _am.distribute_spk = _safe_distribute_spk
-    except Exception:
-        pass
-
-
-_patch_funasr_distribute_spk()
-
-
-def _clean_text(text: str) -> str:
-    text = re.sub(r'<\|[^|>]+\|>', '', text)
-    text = text.strip()
-    text = re.sub(r'^[。，、；：！？,.!?:;]+', '', text)
-    text = text.strip()
-    return text
-
-
-def _parse_result(result: list) -> list[dict]:
-    import logging
-    _log = logging.getLogger(__name__)
-    segments = []
-    if not (isinstance(result, list) and result):
-        return segments
-
-    item = result[0]
-    _log.info(f"_parse_result: keys={list(item.keys())} text_len={len(str(item.get('text','')))}, si_count={len(item.get('sentence_info', []))}")
-
-    for i, sent in enumerate(item.get("sentence_info", [])):
-        text = sent.get("text") or sent.get("sentence") or ""
-        text = _clean_text(text)
-        if i < 3:
-            _log.info(f"  si[{i}]: keys={list(sent.keys())} start={sent.get('start')} end={sent.get('end')} text_len={len(text)}")
-        if not text:
-            continue
-        start = sent.get("start") or 0
-        end = sent.get("end") or 0
-        spk = sent.get("spk", "")
-        if spk is not None and spk != "":
-            spk = f"说话人{int(spk) + 1}"
-        else:
-            spk = ""
-        segments.append({
-            "speaker": spk,
-            "text": text,
-            "start": float(start) / 1000.0,
-            "end": float(end) / 1000.0,
-        })
-
-    if not segments:
-        raw_text = item.get("text", "")
-        if isinstance(raw_text, str):
-            raw_text = _clean_text(raw_text)
-        timestamps = item.get("timestamp", [])
-        _log.info(f"_parse_result fallback: raw_text_type={type(item.get('text')).__name__} ts_len={len(timestamps) if isinstance(timestamps, list) else 'N/A'}")
-        if raw_text and isinstance(timestamps, list) and timestamps:
-            texts = raw_text if isinstance(raw_text, list) else [raw_text]
-            for i, ts in enumerate(timestamps):
-                if isinstance(ts, list) and len(ts) == 2:
-                    txt = texts[i] if i < len(texts) else ""
-                    if not txt:
-                        continue
-                    segments.append({
-                        "speaker": "",
-                        "text": txt,
-                        "start": float(ts[0] or 0) / 1000.0,
-                        "end": float(ts[1] or 0) / 1000.0,
-                    })
-    _log.info(f"_parse_result: produced {len(segments)} segments, range {segments[0]['start']:.1f}-{segments[-1]['end']:.1f}s" if segments else "_parse_result: 0 segments")
-    return segments
+# Patch must be applied at import time, before any engine loads a FunASR model.
+apply_funasr_distribute_spk_patch()
 
 
 class BaseASR(ABC):
@@ -146,7 +36,7 @@ class BaseASR(ABC):
             merge_vad=settings.asr_merge_vad,
             merge_length_s=settings.asr_merge_length_s,
         )
-        return _parse_result(result)
+        return parse_result(result)
 
     @abstractmethod
     def transcribe(self, audio_path: str, language: str = "zh") -> list[dict]:
