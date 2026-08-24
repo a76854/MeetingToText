@@ -5,10 +5,10 @@ from pydantic import BaseModel
 
 from backend.app.config import settings
 from backend.app.models.schemas import GenerateRequest, GenerateResponse
-from backend.app.services.pipeline import get_task
 from backend.app.services.llm import get_llm
-from backend.app.services.store import get_store
+from backend.app.services.store import get_store, get_task
 from backend.app.templates.presets import get_template, get_templates
+from backend.app.templates.prompts import build_minutes_messages
 
 
 class UpdateMinutesRequest(BaseModel):
@@ -34,15 +34,12 @@ async def generate_minutes(req: GenerateRequest):
     if template is None:
         raise HTTPException(status_code=400, detail=f"Unknown template: {req.template_id}")
 
-    system_prompt = template["system_prompt"]
-    output_format = template.get("output_format", "")
-    if output_format:
-        system_prompt += f"\n\n请按照以下格式输出：\n{output_format}"
-
-    user_message = f"请根据以下会议转录内容生成会议纪要：\n\n=== 会议转录开始 ===\n{task.result.full_text}\n=== 会议转录结束 ==="
-
-    if req.custom_instructions:
-        user_message += f"\n\n额外要求：{req.custom_instructions}"
+    messages = build_minutes_messages(
+        template_prompt=template["system_prompt"],
+        transcript_text=task.result.full_text,
+        custom_instructions=req.custom_instructions,
+        output_format_hint=template.get("output_format", ""),
+    )
 
     llm = get_llm()
     if not llm.api_key:
@@ -51,15 +48,14 @@ async def generate_minutes(req: GenerateRequest):
     try:
         minutes = await asyncio.to_thread(
             llm.generate,
-            system_prompt=system_prompt,
-            user_message=user_message,
+            system_prompt=messages[0]["content"],
+            user_message=messages[1]["content"],
             temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
 
-    task.minutes = minutes
     get_store().save_minutes(req.task_id, minutes)
     return GenerateResponse(minutes=minutes)
 
@@ -70,5 +66,4 @@ async def update_minutes(task_id: str, body: UpdateMinutesRequest):
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     get_store().save_minutes(task_id, body.minutes)
-    task.minutes = body.minutes
     return GenerateResponse(minutes=body.minutes)

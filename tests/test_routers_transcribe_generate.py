@@ -34,20 +34,22 @@ Also pinned:
   → human-readable separators (", " and ": "); transcribe.py:66/:74 use
   model_dump_json() → compact separators. The two shapes differ and are
   asserted EXACTLY on the raw frames below.
-- generate.py:62-63 dual write (in-memory task.minutes + store.save_minutes)
-  is a known defect scheduled for collapse in todo 10; here we only pin the
-  OBSERVABLE contract: store receives the minutes exactly once and the
-  response echoes the text.
+- generate.py used to dual-write minutes (in-memory task.minutes plus
+  store.save_minutes); todo 10 collapsed that into the single store path.
+  We still pin the OBSERVABLE contract: store receives the minutes exactly
+  once and the response echoes the text.
 
-# PROMPT-ASSERTIONS-PORTED-BY-TODO-10
-Deliberately NOT asserted in this file (module backend/app/templates/PROMPTS
-does not exist yet; todo 10 creates it and ports the following from here):
-  - system PROMPT assembly (generate.py:37-40): template system_prompt plus
-    the output_format suffix injection
-  - user-message scaffold (generate.py:42-45): the "=== 会议转录开始 ===" fence
-    and the custom_instructions appendix
-Our generate fakes record ONLY that generate() was invoked with the expected
-kwarg keys (temperature / max_tokens) — never their string contents.
+# PROMPT-ASSERTIONS-PORTED-BY-TODO-10 (LANDED)
+# The string assertions listed below were deliberately deferred while the
+# message-builder module did not exist; todo 10 created it and ported them
+# into its own unit test module (tests/test_prompts.py):
+#   - system PROMPT assembly (generate.py:37-40): template system_prompt plus
+#     the output_format suffix injection
+#   - user-message scaffold (generate.py:42-45): the "=== 会议转录开始 ===" fence
+#     and the custom_instructions appendix
+# One seam-level string assertion was added to the happy path below as well.
+# Our generate fakes additionally record the kwarg KEYS (temperature /
+# max_tokens) so the passthrough stays pinned at the router seam.
 """
 
 import json
@@ -393,8 +395,9 @@ def test_generate_llm_error_500_and_no_persist(env, client, monkeypatch):
 def test_generate_success_echoes_and_persists_once(env, client, monkeypatch):
     """Happy path: response echoes text; store receives save_minutes EXACTLY once.
 
-    generate.py:62-63 currently dual-writes (in-memory + store); todo 10
-    collapses it. Today we pin the observable contract only: one store write.
+    The former dual-write (in-memory + store) was collapsed by todo 10;
+    the observable contract pinned here — one store write, one echo — is
+    the single-write behavior that must survive.
     """
     task = _seed_done_with_text(env)
     fake = _FakeLLM(reply="## 会议纪要\n\n决定事项…")
@@ -414,8 +417,12 @@ def test_generate_success_echoes_and_persists_once(env, client, monkeypatch):
     assert resp.json() == {"minutes": "## 会议纪要\n\n决定事项…"}
     assert save_calls == [(task.id, "## 会议纪要\n\n决定事项…")]
     assert env.get(task.id).minutes == "## 会议纪要\n\n决定事项…"
-    # Only kwarg KEYS are asserted — string contents stay untested until todo 10.
+    # Kwarg KEYS pin the passthrough; string contents are additionally pinned
+    # at the seam below (full byte parity lives in the builder's unit tests).
     assert set(fake.calls[0]) == {"system_prompt", "user_message", "temperature", "max_tokens"}
+    assert fake.calls[0]["user_message"].endswith(
+        "=== 会议转录开始 ===\n真实会议转录文本\n=== 会议转录结束 ==="
+    )
 
 
 def test_update_minutes_persists(env, client):
