@@ -16,7 +16,7 @@ Hermetic: no ASR model load, no DB, no network. The import chain of
 """
 
 from backend.app.models.schemas import TaskInfo, TaskResult, TaskStatus, TranscriptSegment
-from backend.app.routers.export import (
+from backend.app.services.exporters import (
     _export_md,
     _export_srt,
     _export_txt,
