@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard,
@@ -17,6 +17,23 @@ import {
 } from '../composables/recorder'
 
 const router = useRouter()
+
+// 自动滚动到底部：用户上翻查看历史时暂停跟随，滚回底部附近时恢复
+const liveContentEl = ref<HTMLElement | null>(null)
+let stickToBottom = true
+
+function onLiveScroll() {
+  const el = liveContentEl.value
+  if (!el) return
+  stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+}
+
+watch(liveText, async () => {
+  if (!stickToBottom) return
+  await nextTick()
+  const el = liveContentEl.value
+  if (el) el.scrollTop = el.scrollHeight
+})
 
 onMounted(async () => {
   await loadSettings()
@@ -82,7 +99,7 @@ onMounted(async () => {
             <span class="live-title">实时转录</span>
             <span v-if="liveStatus === 'waiting'" class="live-warn">加载模型中...</span>
           </div>
-          <div class="live-content">
+          <div ref="liveContentEl" class="live-content" @scroll="onLiveScroll">
             <p v-if="liveText" class="live-text">{{ liveText }}<span class="cursor">▍</span></p>
             <p v-else-if="liveStatus === 'waiting'" class="live-empty">正在启动实时转录，请稍候...</p>
             <p v-else class="live-empty">聆听中...</p>
