@@ -18,7 +18,7 @@ _bg_tasks: set[asyncio.Task] = set()
 
 _INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
 _FLOAT_FIELDS = {"llm_temperature", "asr_merge_length_s"}
-# C1: keep in sync with server.py's _BOOL_KEYS — every bool setting must be
+# C1: keep in sync with startup.py's _BOOL_KEYS — every bool setting must be
 # coerced here, otherwise it falls through to str(value) and is stored as
 # Python's capitalized "True"/"False" instead of lowercase "true"/"false".
 _BOOL_FIELDS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
