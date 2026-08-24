@@ -14,7 +14,7 @@ import {
   useMessage,
 } from 'naive-ui'
 import { api, TaskListItem } from '../api/client'
-import { formatDuration } from '../utils/format'
+import { formatDuration, formatDateTime as fmtDateTime } from '../utils/format'
 
 const router = useRouter()
 const dialog = useDialog()
@@ -53,15 +53,6 @@ function statusLabel(s: string): string {
 
 function taskIcon(hasMinutes: boolean, hasTranscript: boolean): string {
   return hasMinutes ? '📋' : hasTranscript ? '📝' : '🎙️'
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    const d = new Date(iso)
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  } catch {
-    return iso
-  }
 }
 
 function openTask(t: TaskListItem) {
@@ -140,7 +131,7 @@ function removeTask(t: TaskListItem) {
                   {{ statusLabel(t.status) }}
                 </NTag>
                 <NText depth="3" style="font-size: 12px;">
-                  {{ formatDateTime(t.created_at) }}
+                  {{ fmtDateTime(t.created_at) }}
                 </NText>
                 <NText v-if="t.duration" depth="3" style="font-size: 12px;">
                   · {{ formatDuration(t.duration) }}

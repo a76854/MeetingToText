@@ -36,6 +36,7 @@ const pipelineError = ref('')
 const playingId = ref<string | null>(null)
 const audioCurrentTime = ref(0)
 const audioDuration = ref(0)
+const audioPlayer = ref<HTMLAudioElement | null>(null)
 let audioEventsAttached = false
 
 let es: EventSource | null = null
@@ -125,7 +126,7 @@ function exportAs(format: string) {
 }
 
 function togglePlay() {
-  const audio = document.getElementById('transcript-audio') as HTMLAudioElement | null
+  const audio = audioPlayer.value
   if (!audio) return
   initAudioEvents()
   if (audio.paused) {
@@ -138,7 +139,7 @@ function togglePlay() {
 
 function initAudioEvents() {
   if (audioEventsAttached) return
-  const audio = document.getElementById('transcript-audio') as HTMLAudioElement | null
+  const audio = audioPlayer.value
   if (!audio) return
   if (audio.duration && isFinite(audio.duration)) {
     audioDuration.value = audio.duration
@@ -157,7 +158,7 @@ function initAudioEvents() {
 }
 
 function onSeekChange(value: number) {
-  const audio = document.getElementById('transcript-audio') as HTMLAudioElement | null
+  const audio = audioPlayer.value
   if (!audio) return
   initAudioEvents()
   audio.currentTime = value
@@ -295,7 +296,7 @@ function retryTranscribe() {
 
 
 
-      <audio id="transcript-audio" :src="api.audioUrl(taskId)" style="display: none;"></audio>
+      <audio ref="audioPlayer" :src="api.audioUrl(taskId)" style="display: none;"></audio>
     </template>
   </div>
 </template>

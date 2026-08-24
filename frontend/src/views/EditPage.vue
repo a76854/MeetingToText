@@ -19,6 +19,9 @@ const router = useRouter()
 const message = useMessage()
 const taskId = route.params.taskId as string
 
+// Default length (seconds) for a newly added transcript segment.
+const NEW_SEGMENT_DURATION_S = 5
+
 const loading = ref(true)
 const saving = ref(false)
 const segments = ref<any[]>([])
@@ -38,7 +41,7 @@ onMounted(async () => {
 function addSegment() {
   const last = segments.value[segments.value.length - 1]
   const start = last ? last.end : 0
-  segments.value.push({ start, end: start + 5, speaker: last?.speaker || '', text: '' })
+  segments.value.push({ start, end: start + NEW_SEGMENT_DURATION_S, speaker: last?.speaker || '', text: '' })
 }
 
 function removeSegment(i: number) {

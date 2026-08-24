@@ -13,7 +13,7 @@ import {
   useDialog,
 } from 'naive-ui'
 import { api } from '../api/client'
-import { copyText } from '../utils/clipboard'
+import { copyWithFeedback } from '../utils/clipboard'
 import { downloadText } from '../utils/download'
 
 const route = useRoute()
@@ -46,12 +46,8 @@ async function loadMinutes() {
   }
 }
 
-async function copyToClipboard() {
-  if (await copyText(minutes.value)) {
-    message.success('已复制到剪贴板')
-  } else {
-    message.error('复制失败')
-  }
+function copyToClipboard() {
+  copyWithFeedback(minutes.value, message)
 }
 
 function downloadMd() {

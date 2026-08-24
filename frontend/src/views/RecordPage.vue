@@ -18,6 +18,13 @@ import {
 
 const router = useRouter()
 
+// Auto-scroll: within this many px of the bottom the view is "at the bottom".
+const SCROLL_NEAR_BOTTOM_PX = 40
+// Number of volume meter bars rendered in the recording panel.
+const VOLUME_BARS = 32
+// Phase step (radians-ish) for the sine shape of the bar heights.
+const WAVE_PHASE_STEP = 0.5
+
 // 自动滚动到底部：用户上翻查看历史时暂停跟随，滚回底部附近时恢复
 const liveContentEl = ref<HTMLElement | null>(null)
 let stickToBottom = true
@@ -25,7 +32,7 @@ let stickToBottom = true
 function onLiveScroll() {
   const el = liveContentEl.value
   if (!el) return
-  stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+  stickToBottom = el.scrollHeight - el.scrollTop - el.clientHeight < SCROLL_NEAR_BOTTOM_PX
 }
 
 watch(liveText, async () => {
@@ -80,10 +87,10 @@ onMounted(async () => {
 
           <div class="volume-bars">
             <div
-              v-for="i in 32" :key="i"
+              v-for="i in VOLUME_BARS" :key="i"
               class="vol-bar"
-              :class="{ active: volume > (i - 1) / 32 }"
-              :style="{ height: Math.max(4, 8 + Math.sin(i * 0.5) * 12 + volume * 18) + 'px' }"
+              :class="{ active: volume > (i - 1) / VOLUME_BARS }"
+              :style="{ height: Math.max(4, 8 + Math.sin(i * WAVE_PHASE_STEP) * 12 + volume * 18) + 'px' }"
             ></div>
           </div>
 
