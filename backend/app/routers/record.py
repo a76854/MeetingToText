@@ -1,18 +1,27 @@
-import os
+"""Record websocket handler and the DELETE discard endpoint.
+
+The websocket handler is a thin frame pump: receive -> dispatch bytes/text ->
+break on stop/discard intent. All per-connection state lives in
+``WsRecordingSession`` (todo 13; previously eight closure variables mutated
+via ``nonlocal``), every outgoing frame goes through ``_safe_send`` so a dying
+socket can never raise inside the loop, and malformed client JSON gets an
+explicit error frame instead of silently suspending the session (the pre-13
+behavior: json.loads failures fell into the outer catch-all).
+"""
+
 import json
 import uuid
 import asyncio
 import logging
 
-logger = logging.getLogger(__name__)
-
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.app.config import settings
 from backend.app.services.recorder import recorder_manager
-from backend.app.services.pipeline import submit_pipeline
-from backend.app.services.store import create_task
 from backend.app.services.asr_streaming import StreamingASR
+from backend.app.services.record_session import record_session_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["record"])
 
@@ -24,50 +33,164 @@ AUDIO_BUFFER_MAX_SECONDS = 10
 # also sends {"type":"ping"} every ~10s).
 LIVENESS_TIMEOUT_MULTIPLIER = 3
 
-# Pending grace-expiry finalizers keyed by task_id (one per suspended session).
-_grace_timers: dict[str, asyncio.Task] = {}
 
+async def _safe_send(websocket: WebSocket, payload: dict) -> bool:
+    """json.dumps + send_text; logs a warning (never raises) on send failure.
 
-def _cancel_grace_timer(task_id: str) -> None:
-    timer = _grace_timers.pop(task_id, None)
-    if timer is not None and not timer.done():
-        timer.cancel()
-
-
-def _schedule_grace_timer(task_id: str) -> None:
-    _cancel_grace_timer(task_id)
-    grace = max(int(settings.reconnect_grace_seconds), 0)
-    timer = asyncio.create_task(_finalize_after_grace(task_id, grace))
-    _grace_timers[task_id] = timer
-
-
-async def _finalize_audio_to_task(task_id: str) -> str | None:
-    """Single source for 'wav -> task -> pipeline' (explicit stop AND grace expiry)."""
-    audio_path = await recorder_manager.stop_recording(task_id)
-    if audio_path and os.path.exists(audio_path):
-        task = create_task(filename=os.path.basename(audio_path), audio_path=audio_path)
-        submit_pipeline(task.id)
-        return task.id
-    return None
-
-
-async def _finalize_after_grace(task_id: str, grace_seconds: int) -> None:
+    Returns True when the frame was delivered. The buffer-replay loop uses the
+    result to stop replaying into a dead socket; other call sites ignore it
+    because a dead socket ends the loop anyway.
+    """
     try:
-        await asyncio.sleep(grace_seconds)
-    except asyncio.CancelledError:
-        return
-    _grace_timers.pop(task_id, None)
-    # No await between this check and stop_recording's pop, so a concurrent
-    # reconnect can never slip in between check and finalize.
-    if recorder_manager.get_session_state(task_id) != "suspended":
-        return
-    logger.info(f"reconnect grace expired for task={task_id}; finalizing")
-    created = await _finalize_audio_to_task(task_id)
-    logger.info(f"grace-expiry finalize for task={task_id} created pipeline task={created}")
+        await websocket.send_text(json.dumps(payload, ensure_ascii=False))
+        return True
+    except Exception as e:
+        frame_kind = payload.get("status") or payload.get("type") or "unknown"
+        logger.warning(f"failed to send {frame_kind} frame to ws client: {e}")
+        return False
 
 
-@router.websocket("/record/{task_id}")
-async def record_websocket(websocket: WebSocket, task_id: str):
+class WsRecordingSession:
+    """All per-connection state for one /api/record websocket session.
+
+    Previously eight closure variables inside record_websocket mutated via
+    ``nonlocal`` (intent, streaming_session, final_streaming_session,
+    audio_buffer, sample_rate, model_loading, streaming_ready, cancelled).
+    Grouping them here turns the handler into a readable frame pump and gives
+    the streaming-ASR half of the protocol a unit-testable home.
+    """
+
+    def __init__(self, websocket: WebSocket, task_id: str) -> None:
+        self.websocket = websocket
+        self.task_id = task_id
+        # Loop outcome: "stop" | "discard" | None (None => suspend on death).
+        self.intent: str | None = None
+        self.streaming_session = None  # live streaming ASR session
+        self.final_streaming_session = None  # captured on cancel, finalized on stop
+        self.audio_buffer: list[bytes] = []  # chunks buffered while the model loads
+        self.sample_rate: int = 0
+        self.model_loading: asyncio.Task | None = None
+        self.streaming_ready = False
+        self.cancelled = False
+
+    def start_streaming_loader(self) -> None:
+        """Spawn the background load task (config frame with a positive rate)."""
+        self.model_loading = asyncio.create_task(self._load_and_create_session())
+        logger.info(f"streaming ASR loading in background for task={self.task_id}")
+
+    async def _load_and_create_session(self) -> None:
+        """Load the model, create the session, then replay buffered chunks.
+
+        Chunks arriving while the model loads are buffered (capped); on
+        completion they replay into the fresh session so no audio is lost.
+        Any failure logs "load-failed" and resets the state so a later config
+        frame can retry.
+        """
+        try:
+            instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
+            await asyncio.to_thread(instance.load)
+            if self.cancelled:
+                return
+            session = await asyncio.to_thread(instance.create_session, self.sample_rate)
+            chunks_to_feed = self.audio_buffer[:]
+            self.audio_buffer.clear()
+            self.streaming_session = session
+            self.streaming_ready = True
+            for chunk in chunks_to_feed:
+                if self.cancelled:
+                    break
+                partial = session.add_pcm_chunk(chunk)
+                if partial:
+                    # Keep the original break-on-failed-send: a dead socket
+                    # stops the replay early (now logged instead of silent).
+                    if not await _safe_send(self.websocket, {"type": "partial", "text": partial}):
+                        break
+            logger.info(f"streaming ASR ready for task={self.task_id}")
+        except Exception as e:
+            logger.error(f"streaming ASR load-failed for task={self.task_id}: {e}")
+            self.model_loading = None
+            self.streaming_ready = False
+            self.streaming_session = None
+            self.audio_buffer.clear()
+
+    def cancel_streaming(self) -> None:
+        """Tear down in-flight streaming work; capture the session for finalize."""
+        self.cancelled = True
+        if self.model_loading and not self.model_loading.done():
+            self.model_loading.cancel()
+        self.model_loading = None
+        # Capture before nulling so the post-loop finalize on explicit stop
+        # actually sees the session (was dead code before the fix).
+        if self.streaming_session is not None:
+            self.final_streaming_session = self.streaming_session
+        self.streaming_session = None
+        self.streaming_ready = False
+        self.audio_buffer.clear()
+
+    async def handle_audio_chunk(self, chunk: bytes) -> None:
+        """Feed one binary frame: always append to the wav; feed ASR if ready."""
+        await recorder_manager.add_chunk(self.task_id, chunk)
+
+        if not settings.streaming_asr_enabled:
+            if self.model_loading is not None or self.streaming_session is not None:
+                self.cancel_streaming()
+        elif self.streaming_ready and self.streaming_session is not None:
+            try:
+                partial = self.streaming_session.add_pcm_chunk(chunk)
+                if partial:
+                    await _safe_send(self.websocket, {"type": "partial", "text": partial})
+            except Exception as e:
+                logger.warning(f"streaming ASR error: {e}")
+        elif self.model_loading is not None:
+            self.audio_buffer.append(chunk)
+            max_buffer_bytes = (self.sample_rate or 16000) * 2 * AUDIO_BUFFER_MAX_SECONDS
+            while sum(len(c) for c in self.audio_buffer) > max_buffer_bytes:
+                self.audio_buffer.pop(0)
+
+    async def handle_control_message(self, msg: dict) -> bool:
+        """Dispatch one JSON control frame; True when the loop must exit."""
+        action = msg.get("action")
+        if action == "stop":
+            self.intent = "stop"
+            return True
+        if action == "discard":
+            self.intent = "discard"
+            return True
+        if msg.get("type") == "config" and isinstance(msg.get("sample_rate"), int):
+            self.sample_rate = msg["sample_rate"]
+            await recorder_manager.set_sample_rate(self.task_id, self.sample_rate)
+            if (
+                settings.streaming_asr_enabled
+                and self.sample_rate > 0
+                and self.model_loading is None
+            ):
+                self.start_streaming_loader()
+        return False
+
+    async def finalize_streaming(self) -> None:
+        """On explicit stop: flush the captured session, emit the final partial."""
+        if self.final_streaming_session is None:
+            return
+        try:
+            final_partial = await asyncio.to_thread(self.final_streaming_session.finalize)
+            if final_partial:
+                await _safe_send(self.websocket, {
+                    "type": "partial",
+                    "text": final_partial,
+                    "final": True,
+                })
+        except Exception as e:
+            logger.warning(f"streaming ASR finalize error: {e}")
+
+
+async def _begin_session(websocket: WebSocket, task_id: str) -> tuple[str, bool] | None:
+    """Websocket handshake + ownership adoption.
+
+    Accepts the socket, resumes/creates the recording, binds the connection
+    as owner and sends the initial frames (session_busy or resumed). Returns
+    (conn_id, resumed), or None when another connection owns the session
+    (caller must return immediately).
+    """
     await websocket.accept()
 
     conn_id = uuid.uuid4().hex
@@ -75,89 +198,39 @@ async def record_websocket(websocket: WebSocket, task_id: str):
     state = recorder_manager.get_session_state(task_id)
     resumed = False
     if state == "suspended":
-        _cancel_grace_timer(task_id)
+        record_session_service.cancel_grace_timer(task_id)
         resumed = await recorder_manager.resume_recording(task_id, conn_id)
     elif state is None:
-        _cancel_grace_timer(task_id)
+        record_session_service.cancel_grace_timer(task_id)
         await recorder_manager.start_recording(task_id)
 
     if not recorder_manager.attach_owner(task_id, conn_id):
-        try:
-            await websocket.send_text(json.dumps({
-                "status": "error",
-                "code": "session_busy",
-                "message": "recording session is owned by another connection",
-            }, ensure_ascii=False))
-        except Exception:
-            pass
+        await _safe_send(websocket, {
+            "status": "error",
+            "code": "session_busy",
+            "message": "recording session is owned by another connection",
+        })
         await websocket.close(code=1008)
-        return
+        return None
 
     if resumed:
-        try:
-            await websocket.send_text(json.dumps({"status": "resumed"}, ensure_ascii=False))
-        except Exception:
-            pass
+        await _safe_send(websocket, {"status": "resumed"})
+
+    return conn_id, resumed
+
+
+@router.websocket("/record/{task_id}")
+async def record_websocket(websocket: WebSocket, task_id: str):
+    begun = await _begin_session(websocket, task_id)
+    if begun is None:
+        return
+    conn_id, _ = begun
 
     liveness_timeout = LIVENESS_TIMEOUT_MULTIPLIER * max(int(settings.reconnect_grace_seconds), 0)
     if liveness_timeout <= 0:
         liveness_timeout = 0.05
 
-    intent: str | None = None
-    streaming_session = None
-    final_streaming_session = None
-    audio_buffer: list[bytes] = []
-    sample_rate: int = 0
-    model_loading: asyncio.Task | None = None
-    streaming_ready = False
-    cancelled = False
-
-    async def _load_and_create_session():
-        nonlocal streaming_session, streaming_ready, model_loading
-        try:
-            instance = StreamingASR.get_instance(settings.streaming_asr_model_name)
-            await asyncio.to_thread(instance.load)
-            if cancelled:
-                return
-            session = await asyncio.to_thread(instance.create_session, sample_rate)
-            chunks_to_feed = audio_buffer[:]
-            audio_buffer.clear()
-            streaming_session = session
-            streaming_ready = True
-            for chunk in chunks_to_feed:
-                if cancelled:
-                    break
-                partial = session.add_pcm_chunk(chunk)
-                if partial:
-                    try:
-                        await websocket.send_text(json.dumps({
-                            "type": "partial",
-                            "text": partial,
-                        }, ensure_ascii=False))
-                    except Exception:
-                        break
-            logger.info(f"streaming ASR ready for task={task_id}")
-        except Exception as e:
-            logger.error(f"streaming ASR load-failed for task={task_id}: {e}")
-            model_loading = None
-            streaming_ready = False
-            streaming_session = None
-            audio_buffer.clear()
-
-    async def _cancel_streaming():
-        nonlocal cancelled, model_loading, streaming_session, streaming_ready
-        nonlocal final_streaming_session
-        cancelled = True
-        if model_loading and not model_loading.done():
-            model_loading.cancel()
-        model_loading = None
-        # Capture before nulling so the post-loop finalize on explicit stop
-        # actually sees the session (was dead code before the fix).
-        if streaming_session is not None:
-            final_streaming_session = streaming_session
-        streaming_session = None
-        streaming_ready = False
-        audio_buffer.clear()
+    session = WsRecordingSession(websocket, task_id)
 
     try:
         while True:
@@ -170,104 +243,59 @@ async def record_websocket(websocket: WebSocket, task_id: str):
                 )
                 break
             if "bytes" in data:
-                chunk = data["bytes"]
-                await recorder_manager.add_chunk(task_id, chunk)
-
-                if not settings.streaming_asr_enabled:
-                    if model_loading is not None or streaming_session is not None:
-                        await _cancel_streaming()
-                elif streaming_ready and streaming_session is not None:
-                    try:
-                        partial = streaming_session.add_pcm_chunk(chunk)
-                        if partial:
-                            await websocket.send_text(json.dumps({
-                                "type": "partial",
-                                "text": partial,
-                            }, ensure_ascii=False))
-                    except Exception as e:
-                        logger.warning(f"streaming ASR error: {e}")
-                elif model_loading is not None:
-                    audio_buffer.append(chunk)
-                    max_buffer_bytes = (sample_rate or 16000) * 2 * AUDIO_BUFFER_MAX_SECONDS
-                    while sum(len(c) for c in audio_buffer) > max_buffer_bytes:
-                        audio_buffer.pop(0)
+                await session.handle_audio_chunk(data["bytes"])
             elif "text" in data:
-                msg = json.loads(data["text"])
-                action = msg.get("action")
-                if action == "stop":
-                    intent = "stop"
+                try:
+                    msg = json.loads(data["text"])
+                except json.JSONDecodeError:
+                    await _safe_send(websocket, {"status": "error", "message": "invalid json"})
+                    continue
+                if await session.handle_control_message(msg):
                     break
-                if action == "discard":
-                    intent = "discard"
-                    break
-                if msg.get("type") == "config" and isinstance(msg.get("sample_rate"), int):
-                    sample_rate = msg["sample_rate"]
-                    await recorder_manager.set_sample_rate(task_id, sample_rate)
-                    if settings.streaming_asr_enabled and sample_rate > 0 and model_loading is None:
-                        model_loading = asyncio.create_task(_load_and_create_session())
-                        logger.info(f"streaming ASR loading in background for task={task_id}")
     except WebSocketDisconnect:
+        # Normal drop: fall through to the post-loop suspend/finalize logic.
         pass
     except Exception:
-        pass
+        logger.exception(f"unexpected error in record websocket for task={task_id}")
     finally:
-        await _cancel_streaming()
+        session.cancel_streaming()
         recorder_manager.detach_owner(task_id, conn_id)
 
-    if intent == "discard":
-        _cancel_grace_timer(task_id)
+    if session.intent == "discard":
+        record_session_service.cancel_grace_timer(task_id)
         await recorder_manager.discard_recording(task_id)
-        try:
-            await websocket.send_text(json.dumps({"status": "discarded"}, ensure_ascii=False))
-        except Exception:
-            pass
+        await _safe_send(websocket, {"status": "discarded"})
         return
 
-    if intent != "stop":
+    if session.intent != "stop":
         # Plain disconnect / liveness death -> suspend (NOT cancel); the grace
         # timer finalizes if no client adopts the session in time.
         if await recorder_manager.suspend_recording(task_id):
-            _schedule_grace_timer(task_id)
+            record_session_service.schedule_grace_timer(task_id)
             logger.info(
                 f"recording suspended for task={task_id}; "
                 f"grace={settings.reconnect_grace_seconds}s"
             )
         return
 
-    _cancel_grace_timer(task_id)
+    record_session_service.cancel_grace_timer(task_id)
 
-    if final_streaming_session is not None:
-        try:
-            final_partial = await asyncio.to_thread(final_streaming_session.finalize)
-            if final_partial:
-                await websocket.send_text(json.dumps({
-                    "type": "partial",
-                    "text": final_partial,
-                    "final": True,
-                }, ensure_ascii=False))
-        except Exception as e:
-            logger.warning(f"streaming ASR finalize error: {e}")
+    await session.finalize_streaming()
 
-    created = await _finalize_audio_to_task(task_id)
+    created = await record_session_service.finalize_audio_to_task(task_id)
     if created:
-        try:
-            await websocket.send_text(json.dumps({"status": "done", "task_id": created}, ensure_ascii=False))
-        except Exception:
-            pass
+        await _safe_send(websocket, {"status": "done", "task_id": created})
     else:
-        try:
-            await websocket.send_text(json.dumps({"status": "error", "message": "No audio recorded"}, ensure_ascii=False))
-        except Exception:
-            pass
+        await _safe_send(websocket, {"status": "error", "message": "No audio recorded"})
 
 
 @router.delete("/record/{task_id}")
 async def discard_record_session(task_id: str):
     """Discard a suspended (or active) recording: delete file, create no task."""
-    _cancel_grace_timer(task_id)
+    record_session_service.cancel_grace_timer(task_id)
     if not recorder_manager.has_session(task_id):
         raise HTTPException(status_code=404, detail="no recording session")
     ok = await recorder_manager.discard_recording(task_id)
     if not ok:
         raise HTTPException(status_code=404, detail="no recording session")
-    return {"status": "discarded"}
+    return {"status": "ok"}

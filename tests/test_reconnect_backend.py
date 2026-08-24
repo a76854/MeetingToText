@@ -18,6 +18,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import backend.app.routers.record as record_module
+import backend.app.services.record_session as record_session_module
+from backend.app.services.record_session import record_session_service
 from backend.app.config import settings
 from backend.app.services.recorder import (
     STATE_ACTIVE,
@@ -37,9 +39,9 @@ def _run(coro):
 @pytest.fixture(autouse=True)
 def _no_pending_grace_timers():
     yield
-    for timer in list(record_module._grace_timers.values()):
+    for timer in list(record_session_service._grace_timers.values()):
         timer.cancel()
-    record_module._grace_timers.clear()
+    record_session_service._grace_timers.clear()
 
 
 def test_suspend_resume_roundtrip_transitions_state_and_owner():
@@ -137,15 +139,15 @@ def test_grace_expiry_finalizes_suspended_session_into_pipeline(monkeypatch):
         created.append({"filename": filename, "audio_path": audio_path})
         return SimpleNamespace(id=f"pipe_{len(created)}")
 
-    monkeypatch.setattr(record_module, "create_task", fake_create_task)
-    monkeypatch.setattr(record_module, "submit_pipeline", lambda tid: submitted.append(tid))
+    monkeypatch.setattr(record_session_module, "create_task", fake_create_task)
+    monkeypatch.setattr(record_session_module, "submit_pipeline", lambda tid: submitted.append(tid))
 
     _run(recorder_manager.start_recording(task_id))
     _run(recorder_manager.set_sample_rate(task_id, 16000))
     _run(recorder_manager.add_chunk(task_id, b"\x00\x00" * 128))
     assert _run(recorder_manager.suspend_recording(task_id)) is True
 
-    _run(record_module._finalize_after_grace(task_id, 0))
+    _run(record_session_service.finalize_after_grace(task_id, 0))
 
     assert len(created) == 1
     assert submitted == ["pipe_1"]
@@ -158,13 +160,13 @@ def test_grace_expiry_skips_active_session(monkeypatch):
     task_id = _new_task_id()
     created = []
     monkeypatch.setattr(
-        record_module, "create_task",
+        record_session_module, "create_task",
         lambda filename, audio_path: created.append(1) or SimpleNamespace(id="x"),
     )
-    monkeypatch.setattr(record_module, "submit_pipeline", lambda tid: None)
+    monkeypatch.setattr(record_session_module, "submit_pipeline", lambda tid: None)
 
     _run(recorder_manager.start_recording(task_id))
-    _run(record_module._finalize_after_grace(task_id, 0))
+    _run(record_session_service.finalize_after_grace(task_id, 0))
 
     assert created == []
     assert recorder_manager.has_session(task_id)
@@ -175,14 +177,14 @@ def test_grace_expiry_with_empty_recording_creates_no_task(monkeypatch):
     task_id = _new_task_id()
     created = []
     monkeypatch.setattr(
-        record_module, "create_task",
+        record_session_module, "create_task",
         lambda filename, audio_path: created.append(1) or SimpleNamespace(id="x"),
     )
-    monkeypatch.setattr(record_module, "submit_pipeline", lambda tid: None)
+    monkeypatch.setattr(record_session_module, "submit_pipeline", lambda tid: None)
 
     _run(recorder_manager.start_recording(task_id))
     assert _run(recorder_manager.suspend_recording(task_id)) is True
-    _run(record_module._finalize_after_grace(task_id, 0))
+    _run(record_session_service.finalize_after_grace(task_id, 0))
 
     assert created == []
     assert not recorder_manager.has_session(task_id)
@@ -204,7 +206,7 @@ def test_delete_route_discards_session_and_404s_when_absent():
 
     resp = client.delete(f"/api/record/{task_id}")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "discarded"}
+    assert resp.json() == {"status": "ok"}
     assert not os.path.exists(filepath)
     assert not recorder_manager.has_session(task_id)
 

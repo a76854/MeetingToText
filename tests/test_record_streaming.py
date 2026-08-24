@@ -20,6 +20,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import backend.app.routers.record as record_module
+import backend.app.services.record_session as record_session_module
 from backend.app.config import settings
 
 
@@ -169,7 +170,10 @@ def fake_asr(monkeypatch):
 def ws_client(monkeypatch):
     def _make(recorder=None):
         rec = recorder or FakeRecorderManager()
+        # stop_recording is called from the session service (finalize path),
+        # the rest of the lifecycle from the router namespace.
         monkeypatch.setattr(record_module, "recorder_manager", rec)
+        monkeypatch.setattr(record_session_module, "recorder_manager", rec)
         app = FastAPI()
         app.include_router(record_module.router)
         client = TestClient(app)

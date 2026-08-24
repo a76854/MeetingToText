@@ -5,8 +5,10 @@ End-to-end through the real /api/record/{task_id} websocket handler
 recorder_manager-level unit tests in test_reconnect_backend.py.
 
 Hermetic: no FunASR anywhere.
-- pipeline side effects faked in the record_module namespace (create_task /
-  submit_pipeline) so "task created" is observable without a DB or ASR.
+- pipeline side effects faked in the record_session_module namespace
+  (create_task / submit_pipeline) so "task created" is observable without a
+  DB or ASR (todo 12 moved those calls from record.py into the session
+  service; the patch target followed).
 - streaming ASR faked by replacing record_module.StreamingASR wholesale
   (task-6 learning: patch module globals imported by name).
 - audio lands under a tmp data_dir (settings.data_dir redirect; temp_dir /
@@ -20,6 +22,9 @@ Determinism rules (task-6-fix learnings):
 - log-message barrier ("streaming ASR ready") before feeding chunks in the
   streaming test — emit() runs synchronously inside logger.info ON THE LOOP
   THREAD after streaming_ready=True and buffer replay finished;
+- malformed JSON text frames get {"status":"error","message":"invalid json"}
+  and the session stays alive (todo 13 fix: previously such a frame fell into
+  the handler's outer catch-all and silently suspended the recording);
 - grace=1 (not 0) for the expiry test: liveness timeout = 3×grace with a
   0.05s floor, so grace=0 would liveness-suspend the ACTIVE connection
   between frames and flake. 1s keeps expiry fast AND the live connection safe.
@@ -40,6 +45,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import backend.app.routers.record as record_module
+import backend.app.services.record_session as record_session_module
+from backend.app.services.record_session import record_session_service
 from backend.app.config import settings
 from backend.app.services.recorder import (
     STATE_ACTIVE,
@@ -71,7 +78,8 @@ def ws_client(monkeypatch, tmp_path):
     monkeypatch.setattr(settings, "data_dir", str(tmp_path))
     # config.py makedirs these at import time against the REAL data_dir; the
     # redirect needs its own copies or wave.open() raises inside the WS loop,
-    # where record.py's bare `except Exception: pass` swallows it silently.
+    # where record.py's outer handler logs it (logger.exception) before
+    # suspending — silently swallowed by `except Exception: pass` before todo 13.
     os.makedirs(settings.temp_dir, exist_ok=True)
     os.makedirs(settings.upload_dir, exist_ok=True)
     app = FastAPI()
@@ -94,9 +102,9 @@ class PipelineSpy:
             self.created.append({"filename": filename, "audio_path": audio_path})
             return SimpleNamespace(id=f"pipe_{len(self.created)}")
 
-        monkeypatch.setattr(record_module, "create_task", fake_create_task)
+        monkeypatch.setattr(record_session_module, "create_task", fake_create_task)
         monkeypatch.setattr(
-            record_module, "submit_pipeline", lambda tid: self.submitted.append(tid)
+            record_session_module, "submit_pipeline", lambda tid: self.submitted.append(tid)
         )
         return self
 
@@ -110,12 +118,12 @@ def pipeline_spy(monkeypatch):
 def _no_leaked_sessions_or_timers():
     """Snapshot-and-clean: cancel grace timers + discard sessions this test made."""
     pre_sessions = set(recorder_manager._active_recordings)
-    pre_timers = set(record_module._grace_timers)
+    pre_timers = set(record_session_service._grace_timers)
     yield
-    for tid, timer in list(record_module._grace_timers.items()):
+    for tid, timer in list(record_session_service._grace_timers.items()):
         if tid not in pre_timers:
             timer.cancel()
-            record_module._grace_timers.pop(tid, None)
+            record_session_service._grace_timers.pop(tid, None)
     leftovers = [
         tid
         for tid in recorder_manager._active_recordings
@@ -159,7 +167,7 @@ def test_01_abrupt_close_suspends_session_without_task(pipeline_spy, ws_client):
         "session was not suspended after abrupt close"
     )
     assert recorder_manager.has_session(tid)
-    assert tid in record_module._grace_timers, "grace finalize was not armed"
+    assert tid in record_session_service._grace_timers, "grace finalize was not armed"
     assert pipeline_spy.created == [], "a task was created during suspend"
     assert pipeline_spy.submitted == []
 
@@ -198,7 +206,7 @@ def test_02_reconnect_resumes_same_wav_and_stops_into_one_task(pipeline_spy, ws_
     assert frames == first + second, "wav must contain both connections' chunks"
     os.remove(dest)
     assert not recorder_manager.has_session(tid)
-    assert tid not in record_module._grace_timers, "adoption must cancel the timer"
+    assert tid not in record_session_service._grace_timers, "adoption must cancel the timer"
 
 
 # ------------------------------------------------------- scenario 3: supersede
@@ -265,7 +273,7 @@ def test_04_grace_expiry_auto_finalizes_exactly_one_task(pipeline_spy, ws_client
     )
     assert pipeline_spy.submitted == ["pipe_1"]
     assert not recorder_manager.has_session(tid)
-    assert tid not in record_module._grace_timers
+    assert tid not in record_session_service._grace_timers
     _, frames = _wav_frames(pipeline_spy.created[0]["audio_path"])
     assert frames == chunk
     os.remove(pipeline_spy.created[0]["audio_path"])
@@ -287,10 +295,10 @@ def test_05_delete_discards_suspended_session_zero_tasks(pipeline_spy, ws_client
 
     resp = ws_client.delete(f"/api/record/{tid}")
     assert resp.status_code == 200
-    assert resp.json() == {"status": "discarded"}
+    assert resp.json() == {"status": "ok"}
     assert not os.path.exists(filepath)
     assert not recorder_manager.has_session(tid)
-    assert tid not in record_module._grace_timers, "DELETE must cancel the timer"
+    assert tid not in record_session_service._grace_timers, "DELETE must cancel the timer"
     assert pipeline_spy.created == []
     assert ws_client.delete(f"/api/record/{tid}").status_code == 404
 
@@ -386,5 +394,33 @@ def test_06_stop_immediately_finalizes_streaming_into_one_task(pipeline_spy, ws_
     assert len(pipeline_spy.created) == 1
     assert pipeline_spy.submitted == ["pipe_1"]
     assert not recorder_manager.has_session(tid)
-    assert tid not in record_module._grace_timers, "explicit stop arms no timer"
+    assert tid not in record_session_service._grace_timers, "explicit stop arms no timer"
+    os.remove(pipeline_spy.created[0]["audio_path"])
+
+
+# ------------------------------------------------- scenario 7: malformed json
+
+
+def test_malformed_json_gets_error_frame(pipeline_spy, ws_client):
+    """A non-JSON text frame must yield {"status":"error","message":"invalid json"}
+    and leave the session ALIVE: before todo 13 such a frame hit the handler's
+    outer catch-all and silently suspended the recording."""
+    tid = _new_task_id()
+    with _connect(ws_client, tid) as ws:
+        _config(ws)
+        ws.send_bytes(b"\x77\x00" * 100)
+        ws.send_text("not-json{{{")
+        err = ws.receive_json()
+        assert err == {"status": "error", "message": "invalid json"}
+
+        # Only the bad frame was skipped: later audio is still accepted and a
+        # clean stop still finalizes into exactly one task.
+        ws.send_bytes(b"\x88\x00" * 50)
+        assert _poll(lambda: recorder_manager.get_session_state(tid) == STATE_ACTIVE)
+        ws.send_json({"action": "stop"})
+        done = ws.receive_json()
+
+    assert done["status"] == "done"
+    assert done["task_id"] == "pipe_1"
+    assert len(pipeline_spy.created) == 1
     os.remove(pipeline_spy.created[0]["audio_path"])
