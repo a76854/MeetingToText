@@ -1,4 +1,3 @@
-import sys
 import os
 from pathlib import Path
 
@@ -6,11 +5,6 @@ import pytest
 
 # Non-hermetic: downloads FunASR models; skip by default, run via `pytest -m smoke`.
 pytestmark = pytest.mark.smoke
-
-
-@pytest.fixture(scope="module", autouse=True)
-def setup_path():
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _list_recordings():
@@ -141,13 +135,9 @@ def test_full_pipeline():
     task = create_task(filename=Path(speech_file).name, audio_path=speech_file)
     print(f"  Task created: {task.id}")
 
-    import asyncio
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(run_pipeline(task.id))
-    finally:
-        loop.close()
+    # run_pipeline is a plain synchronous function (pipeline.py), so call it
+    # directly instead of passing it to a coroutine runner.
+    run_pipeline(task.id)
 
     task = get_task(task.id)
     assert task is not None
