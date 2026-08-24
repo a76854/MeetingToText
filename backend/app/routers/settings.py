@@ -1,9 +1,9 @@
 import asyncio
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
-from backend.app.config import Settings, settings, set_cpu_threads
+from backend.app.config import SETTING_SPECS, settings, settings_lock, set_cpu_threads
 from backend.app.models.schemas import SettingsUpdate, SettingsInfo
 from backend.app.services.llm import update_llm_config
 from backend.app.services.asr import unload_all_asr
@@ -16,26 +16,15 @@ router = APIRouter(prefix="/api", tags=["settings"])
 _bg_tasks: set[asyncio.Task] = set()
 
 
-_INT_FIELDS = {"llm_max_tokens", "ncpu", "asr_batch_size_s", "asr_max_single_segment_time"}
-_FLOAT_FIELDS = {"llm_temperature", "asr_merge_length_s"}
-# C1: keep in sync with startup.py's _BOOL_KEYS — every bool setting must be
-# coerced here, otherwise it falls through to str(value) and is stored as
-# Python's capitalized "True"/"False" instead of lowercase "true"/"false".
-_BOOL_FIELDS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
-
-
 def _coerce(key: str, value: Any) -> Any:
     if value is None:
         return None
-    if key in _INT_FIELDS:
-        return int(value)
-    if key in _FLOAT_FIELDS:
-        return float(value)
-    if key in _BOOL_FIELDS:
-        if isinstance(value, bool):
-            return value
-        return str(value).lower() == "true"
-    return str(value)
+    spec = SETTING_SPECS.get(key)
+    if spec is None:
+        # Unreachable for SettingsUpdate fields (superset test pins this), kept
+        # to preserve the former fall-through behavior for any future key.
+        return str(value)
+    return spec.caster(value)
 
 
 @router.get("/settings", response_model=SettingsInfo)
@@ -87,20 +76,21 @@ async def update_settings(body: SettingsUpdate):
         # untouched fields as ""); explicit clears go through DELETE /settings/{key}.
         if isinstance(raw, str) and not raw.strip():
             continue
-        value = _coerce(key, raw)
-        # C3: bools are stored uniformly as lowercase "true"/"false" — never
-        # str(True)="True" — so every reader can use raw.lower() == "true".
-        stored = str(value).lower() if key in _BOOL_FIELDS else str(value)
-        s.set_setting(key, stored)
-        setattr(settings, key, value)
-        if key == "ncpu":
-            set_cpu_threads(value)
-        if key.startswith("llm_"):
-            llm_touched = True
-        elif key == "ncpu" or key.startswith("asr_"):
-            asr_touched = True
-        elif key.startswith("streaming_asr_"):
-            streaming_asr_touched = True
+        with settings_lock:
+            value = _coerce(key, raw)
+            # Bools are stored uniformly as lowercase "true"/"false" — never
+            # str(True)="True" — so every reader can use raw.lower() == "true".
+            stored = str(value).lower() if isinstance(value, bool) else str(value)
+            s.set_setting(key, stored)
+            setattr(settings, key, value)
+            if key == "ncpu":
+                set_cpu_threads(value)
+            if key.startswith("llm_"):
+                llm_touched = True
+            elif key == "ncpu" or key.startswith("asr_"):
+                asr_touched = True
+            elif key.startswith("streaming_asr_"):
+                streaming_asr_touched = True
 
     if llm_touched and settings.llm_api_key:
         update_llm_config(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
@@ -120,28 +110,21 @@ async def update_settings(body: SettingsUpdate):
     return {"status": "ok"}
 
 
-_DELETABLE_KEYS = {
-    "llm_base_url", "llm_api_key", "llm_model", "llm_temperature", "llm_max_tokens",
-    "asr_model_type", "asr_model_name", "asr_needs_punc", "ncpu",
-    "asr_batch_size_s", "asr_merge_length_s", "asr_merge_vad", "asr_max_single_segment_time",
-    "streaming_asr_enabled", "streaming_asr_model_name",
-    "browser_noise_suppression", "audio_source",
-}
-
-
 @router.delete("/settings/{key}")
 async def delete_setting(key: str):
-    if key not in _DELETABLE_KEYS:
-        from fastapi import HTTPException
+    spec = SETTING_SPECS.get(key)
+    if spec is None or not spec.deletable:
         raise HTTPException(status_code=400, detail=f"Unknown setting: {key}")
-    get_store().delete_setting(key)
     # Reset the runtime object too, otherwise generation keeps using the deleted
-    # value while GET /settings reports the setting as gone. Defaults come from a
-    # fresh Settings() so env-provided (MTT_*) boot values are preserved.
-    value = getattr(Settings(), key)
-    setattr(settings, key, value)
-    if key == "ncpu":
-        set_cpu_threads(value)
+    # value while GET /settings reports the setting as gone. Spec defaults are
+    # snapshotted from a fresh Settings() so env-provided (MTT_*) boot values
+    # are preserved.
+    value = spec.default
+    with settings_lock:
+        get_store().delete_setting(key)
+        setattr(settings, key, value)
+        if key == "ncpu":
+            set_cpu_threads(value)
     if key.startswith("llm_"):
         # Rebuild the cached LLM client from the reset values so a deleted
         # llm_api_key can't keep serving generate requests.

@@ -19,29 +19,9 @@ import time
 import asyncio
 import logging
 
-from backend.app.config import settings
+from backend.app.config import SETTING_SPECS, settings, settings_lock
 
 logger = logging.getLogger(__name__)
-
-
-_USER_SETTING_KEYS = {
-    "llm_base_url": str,
-    "llm_api_key": str,
-    "llm_model": str,
-    "llm_temperature": float,
-    "llm_max_tokens": int,
-    "asr_model_type": str,
-    "asr_model_name": str,
-    "ncpu": int,
-    "asr_batch_size_s": int,
-    "asr_merge_length_s": float,
-    "asr_max_single_segment_time": int,
-    "streaming_asr_model_name": str,
-    "reconnect_grace_seconds": int,
-    "audio_source": str,
-}
-
-_BOOL_KEYS = {"asr_needs_punc", "streaming_asr_enabled", "browser_noise_suppression", "asr_merge_vad"}
 
 
 def load_user_settings() -> int:
@@ -49,20 +29,16 @@ def load_user_settings() -> int:
     from backend.app.services.llm import update_llm_config
     store = get_store()
     loaded = 0
-    for key, caster in _USER_SETTING_KEYS.items():
-        raw = store.get_setting(key)
-        if not raw:
-            continue
-        try:
-            value = caster(raw)
-        except (TypeError, ValueError):
-            continue
-        setattr(settings, key, value)
-        loaded += 1
-    for key in _BOOL_KEYS:
-        raw = store.get_setting(key)
-        if raw:
-            setattr(settings, key, raw.lower() == "true")
+    with settings_lock:
+        for key, spec in SETTING_SPECS.items():
+            raw = store.get_setting(key)
+            if not raw:
+                continue
+            try:
+                value = spec.caster(raw)
+            except (TypeError, ValueError):
+                continue
+            setattr(settings, key, value)
             loaded += 1
     if settings.llm_api_key and settings.llm_base_url and settings.llm_model:
         update_llm_config(settings.llm_base_url, settings.llm_api_key, settings.llm_model)

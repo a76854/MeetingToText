@@ -73,6 +73,9 @@ class GenerateResponse(BaseModel):
     minutes: str
 
 
+# Hand-written on purpose (no codegen): backend/app/config.py SETTING_SPECS is
+# the single source of truth for which keys exist, their caster kinds, defaults,
+# and deletability. Keep these fields in sync with it.
 class SettingsUpdate(BaseModel):
     llm_base_url: str | None = None
     llm_api_key: str | None = None
@@ -95,6 +98,7 @@ class SettingsUpdate(BaseModel):
 
 # C7: response model only — GET /settings populates every field from
 # backend/app/config.py, so no inline defaults here (they would drift).
+# Fields must stay in sync with config.py SETTING_SPECS (hand-written; no codegen).
 class SettingsInfo(BaseModel):
     llm_base_url: str
     llm_model: str
