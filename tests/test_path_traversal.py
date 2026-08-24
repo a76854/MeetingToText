@@ -3,15 +3,12 @@
 Before the fix, GET /../../backend/app/config.py served Python source because
 os.path.join(frontend_dist, full_path) escaped the dist root and isfile() passed.
 """
-import sys
 import os
 
 import pytest
 from fastapi.testclient import TestClient
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from backend.app.server import app  # noqa: E402
+from backend.app.server import app
 
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
 

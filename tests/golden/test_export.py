@@ -15,14 +15,8 @@ Hermetic: no ASR model load, no DB, no network. The import chain of
 ``backend.app.routers.export`` only defines functions at module level.
 """
 
-import os
-import sys
-
-# Bootstrap project root onto sys.path (same pattern as tests/test_pipeline.py)
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from backend.app.models.schemas import TaskInfo, TaskResult, TaskStatus, TranscriptSegment  # noqa: E402
-from backend.app.routers.export import (  # noqa: E402
+from backend.app.models.schemas import TaskInfo, TaskResult, TaskStatus, TranscriptSegment
+from backend.app.routers.export import (
     _export_md,
     _export_srt,
     _export_txt,

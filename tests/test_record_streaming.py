@@ -11,8 +11,6 @@ monkeypatched with fakes, and recorder_manager is replaced with an in-memory fak
 
 import json
 import logging
-import os
-import sys
 import threading
 import time
 import uuid
@@ -20,10 +18,6 @@ import uuid
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 import backend.app.routers.record as record_module
 from backend.app.config import settings

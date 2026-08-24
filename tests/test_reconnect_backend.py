@@ -8,7 +8,6 @@ create_task/submit_pipeline in the record module namespace.
 """
 
 import os
-import sys
 import uuid
 import wave
 import asyncio
@@ -17,10 +16,6 @@ from types import SimpleNamespace
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, PROJECT_ROOT)
 
 import backend.app.routers.record as record_module
 from backend.app.config import settings

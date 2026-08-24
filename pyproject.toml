@@ -34,6 +34,7 @@ meetingtotext = "backend.app.server:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 markers = [
     "smoke: non-hermetic end-to-end tests that download real FunASR models and use data/uploads recordings (deselect by default; run with -m smoke)",
 ]
