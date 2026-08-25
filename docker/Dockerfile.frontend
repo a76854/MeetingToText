@@ -17,6 +17,9 @@ COPY frontend/index.html ./
 COPY frontend/public ./public
 COPY frontend/src ./src
 
+ARG VITE_API_BASE_URL=""
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+
 RUN npm run build
 
 # Stage 2 — serve with nginx:alpine

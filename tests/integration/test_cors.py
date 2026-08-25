@@ -58,7 +58,7 @@ def _make_cors_app() -> FastAPI:
 def test_cors_helper_default_list(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("MTT_CORS_ORIGINS", raising=False)
     origins = cors_origins_from_env()
-    assert origins == ["http://localhost:5173", "http://localhost:8000"]
+    assert origins == ["http://localhost:5173", "http://localhost:8000", "http://localhost"]
 
 
 def test_cors_helper_custom_single(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -77,7 +77,7 @@ def test_cors_helper_blank_string_falls_back_to_default(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("MTT_CORS_ORIGINS", "   ")
-    assert cors_origins_from_env() == ["http://localhost:5173", "http://localhost:8000"]
+    assert cors_origins_from_env() == ["http://localhost:5173", "http://localhost:8000", "http://localhost"]
 
 
 def test_cors_helper_drops_empty_segments_only(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -107,6 +107,15 @@ def test_cors_allows_localhost_8000(monkeypatch: pytest.MonkeyPatch) -> None:
         resp = client.get("/api/health", headers={"Origin": "http://localhost:8000"})
         assert resp.status_code == 200
         assert resp.headers.get("access-control-allow-origin") == "http://localhost:8000"
+
+
+def test_cors_allows_localhost_80(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("MTT_CORS_ORIGINS", raising=False)
+    app = _make_cors_app()
+    with TestClient(app) as client:
+        resp = client.get("/api/health", headers={"Origin": "http://localhost"})
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") == "http://localhost"
 
 
 def test_cors_blocks_unlisted_evil_origin(monkeypatch: pytest.MonkeyPatch) -> None:

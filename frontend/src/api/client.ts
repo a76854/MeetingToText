@@ -1,7 +1,7 @@
-const BASE = '/api'
+export const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + url, {
+  const res = await fetch(API_BASE + url, {
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     ...options,
   })
@@ -102,7 +102,7 @@ export const api = {
     }),
 
   streamProgress: (id: string, onProgress: (t: TaskInfo) => void, onDone: (t: TaskInfo) => void, onError: (e: string) => void) => {
-    const es = new EventSource(BASE + `/transcribe/${id}/stream`)
+    const es = new EventSource(API_BASE + `/transcribe/${id}/stream`)
     es.addEventListener('progress', (e: any) => onProgress(JSON.parse(e.data)))
     es.addEventListener('done', (e: any) => { es.close(); onDone(JSON.parse(e.data)) })
     es.addEventListener('error', (e: any) => { es.close(); try { onError(JSON.parse(e.data).error) } catch { onError('连接失败') } })
@@ -132,7 +132,7 @@ export const api = {
   deleteSetting: (key: string): Promise<{ status: string }> =>
     request(`/settings/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
-  exportUrl: (id: string, format: string) => `${BASE}/export/${id}?format=${encodeURIComponent(format)}`,
+  exportUrl: (id: string, format: string) => `${API_BASE}/export/${id}?format=${encodeURIComponent(format)}`,
 
-  audioUrl: (id: string) => `${BASE}/audio/${id}`,
+  audioUrl: (id: string) => `${API_BASE}/audio/${id}`,
 }

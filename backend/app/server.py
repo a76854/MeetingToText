@@ -6,8 +6,7 @@ No business logic lives here. Responsibilities:
   `backend.app.startup`);
 - register CORS middleware;
 - include every router (upload, record, transcribe, generate, settings,
-  export, audio, health);
-- serve the built SPA from `frontend/dist` with an index.html fallback.
+  export, audio, health).
 """
 
 import logging
@@ -22,8 +21,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
 
 from backend.app import startup
 from backend.app.config import cors_origins_from_env, settings
@@ -87,38 +84,6 @@ app.include_router(audio.router)
 app.include_router(health_router)
 
 
-frontend_dist = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist"
-)
-_index_path = os.path.join(frontend_dist, "index.html")
-
-if os.path.isdir(frontend_dist):
-    app.mount(
-        "/assets",
-        StaticFiles(directory=os.path.join(frontend_dist, "assets")),
-        name="assets",
-    )
-
-    @app.get("/")
-    async def root_fallback():
-        return FileResponse(_index_path)
-
-    @app.get("/{full_path:path}")
-    async def spa_fallback(full_path: str):
-        # Defensive: reject explicit parent-directory segments outright.
-        if any(part == ".." for part in full_path.replace("\\", "/").split("/")):
-            return FileResponse(_index_path)
-        file_path = os.path.realpath(os.path.join(frontend_dist, full_path))
-        dist_root = os.path.realpath(frontend_dist)
-        if (
-            full_path
-            and os.path.isfile(file_path)
-            and file_path.startswith(dist_root + os.sep)
-        ):
-            return FileResponse(file_path)
-        return FileResponse(_index_path)
-
-
 def serve(
     host: str = "127.0.0.1",
     port: int = 8000,
@@ -154,6 +119,3 @@ def serve(
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend")
         ]
     uvicorn.run("backend.app.server:app", **run_kwargs)
-
-
-

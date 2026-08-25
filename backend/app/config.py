@@ -95,20 +95,21 @@ def coerce_bool(value: Any) -> bool:
 def cors_origins_from_env() -> list[str]:
     """Parse ``MTT_CORS_ORIGINS`` into an allowlist.
 
-    Same-origin deployments (nginx reverse-proxy) don't need CORS at all —
-    the browser never sends a cross-origin request when frontend and backend
-    share one origin.  This list exists for dev cross-origin (vite on
-    ``:5173`` proxying to the API on ``:8000``) and explicit multi-origin
-    setups.  Configure via ``MTT_CORS_ORIGINS`` as a comma-separated list.
+    Production is cross-origin: nginx serves the SPA on ``:80`` (``http://localhost``)
+    while the browser calls the backend directly at ``:8000``. Both services
+    run under ``http://localhost`` but different ports, so CORS is required
+    even in prod. Dev keeps the same shape via vite proxy on ``:5173``.
+
+    Configure via ``MTT_CORS_ORIGINS`` as a comma-separated list.
 
     Returns:
         Stripped, non-empty origins.  Defaults to
-        ``["http://localhost:5173", "http://localhost:8000"]`` when the env
+        ``["http://localhost:5173", "http://localhost:8000", "http://localhost"]`` when the env
         var is unset or blank.
     """
     raw = os.getenv("MTT_CORS_ORIGINS", "")
     if raw.strip() == "":
-        return ["http://localhost:5173", "http://localhost:8000"]
+        return ["http://localhost:5173", "http://localhost:8000", "http://localhost"]
     parts = [p.strip() for p in raw.split(",")]
     return [p for p in parts if p]
 

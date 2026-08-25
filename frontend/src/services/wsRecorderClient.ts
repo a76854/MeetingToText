@@ -53,10 +53,25 @@ export function pickWebmMime(): string {
     : 'audio/webm'
 }
 
+function apiBase(): string {
+  const raw = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'
+  return raw.replace(/\/$/, '')
+}
+
+function httpToWs(url: string): string {
+  if (url.startsWith('http://')) return 'ws://' + url.slice(7)
+  if (url.startsWith('https://')) return 'wss://' + url.slice(8)
+  return url
+}
+
 /** ws:// or wss:// URL of the recording session endpoint. */
 export function wsUrl(id: string): string {
+  const base = apiBase()
+  if (base.startsWith('http://') || base.startsWith('https://')) {
+    return `${httpToWs(base)}/record/${id}`
+  }
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${window.location.host}/api/record/${id}`
+  return `${proto}//${window.location.host}${base}/record/${id}`
 }
 
 const HEARTBEAT_MS = 10_000 // server liveness death = 3x grace; ping keeps it alive

@@ -14,12 +14,10 @@
 #   (if present) is reused — that is intentional; no data is deleted by compose
 #   operations. The volume survives `docker compose down`.
 #
-# Networking / port exposure (Metis guard):
-#   Backend exposes 8000 only internally to nginx via `expose` (no `ports`
-#   mapping). Clients never reach http://localhost:8000 directly — all API
-#   traffic goes through nginx at http://localhost (/api/ → proxy_pass
-#   http://backend:8000). This preserves same-origin (CORS not needed in prod)
-#   and keeps the backend surface private. Frontend publishes 80:80.
+# Networking / port exposure:
+#   Backend publishes 8000:8000 so the browser reaches the API directly
+#   cross-origin (nginx is pure static on :80, no reverse proxy). Frontend
+#   publishes 80:80.
 #
 services:
   backend:
@@ -40,13 +38,15 @@ services:
       retries: 10
       start_period: 300s
     restart: unless-stopped
-    expose:
-      - "8000"
+    ports:
+      - "8000:8000"
 
   frontend:
     build:
       context: ..
       dockerfile: docker/Dockerfile.frontend
+      args:
+        VITE_API_BASE_URL: "http://localhost:8000/api"
     ports:
       - "80:80"
     depends_on:

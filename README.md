@@ -34,24 +34,26 @@ cd frontend && npm install && cd ..
 
 ### 3. 启动
 
-```bash
-cd frontend && npm run build && cd ..
-meetingtotext serve
-# 访问 http://localhost:8000
-```
-
-首次启动后，进入「**设置**」页面填入 LLM API Key 并保存（设置保存在 SQLite 数据库中）。
-
-开发模式（前端热更新）：
+开发模式（前端热更新 + 后端 reload）：
 
 ```bash
 # 终端 1 - 后端
 meetingtotext serve --reload
+# 监听 http://localhost:8000
 
 # 终端 2 - 前端
 cd frontend && npm run dev
-# 访问 http://localhost:5173
+# 访问 http://localhost:5173 （vite proxy 将 /api 转发至 :8000）
 ```
+
+容器部署：
+
+```bash
+docker compose -f docker/docker-compose.yml up --build
+# 前端 http://localhost (nginx 纯静态) → 后端 http://localhost:8000 (CORS 跨源直连)
+```
+
+首次启动后，进入「**设置**」页面填入 LLM API Key 并保存（设置保存在 SQLite 数据库中）。
 
 ## 使用流程
 
@@ -88,4 +90,4 @@ cd frontend && npm run dev
 | `MTT_LOG_FILE` | 空（仅控制台） | 日志文件路径，非空时写入磁盘 |
 | `MTT_HEALTH_MIN_DISK_MB` | `100` | 健康探针磁盘可用空间阈值（MB），低于返回 503 |
 | `MTT_RATE_LIMIT_RPM` | `60` | 进程内固定窗口限流（60s 窗口，每 IP 每分钟请求数）；仅 --workers 1 时精确 |
-| `MTT_CORS_ORIGINS` | `http://localhost:5173,http://localhost:8000` | 允许的跨源列表（逗号分隔）；同源部署无需配置 |
+| `MTT_CORS_ORIGINS` | `http://localhost:5173,http://localhost:8000,http://localhost` | 允许的跨源列表（逗号分隔）；生产跨源（nginx :80 → backend :8000）需包含 `http://localhost` |
