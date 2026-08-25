@@ -46,6 +46,7 @@ ILLEGAL_EXT_PREFIX = "不支持的文件格式，支持: "
 EMPTY_FILE_DETAIL = "空文件"
 TASK_NOT_FOUND_DETAIL = "Task not found"
 AUDIO_FILE_MISSING_DETAIL = "音频文件不存在"
+MAGIC_MISMATCH_DETAIL = "文件内容与音频格式不符"
 
 
 @pytest.fixture()
@@ -182,3 +183,55 @@ def test_get_audio_task_with_missing_file_returns_404(client, tmp_path):
 
     assert resp.status_code == 404
     assert resp.json() == {"detail": AUDIO_FILE_MISSING_DETAIL}
+
+
+# ---------------------------------------------------------------- magic + precheck (task 11)
+
+
+def test_upload_wav_magic_mismatch_returns_400_and_no_file_leak(client):
+    before = os.listdir(settings.upload_dir)
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("fake.wav", b"MZ" + b"\x90\x00" * 32, "audio/wav")},
+    )
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": MAGIC_MISMATCH_DETAIL}
+    assert os.listdir(settings.upload_dir) == before
+    assert os.listdir(settings.upload_dir) == []
+
+
+def test_upload_wav_valid_minimal_header_passes(client, tmp_path):
+    payload = b"RIFF" + b"\x24\x00\x00\x00" + b"WAVE" + b"fmt " + b"\x10\x00\x00\x00" + b"\x00" * 20
+    resp = client.post(
+        "/api/upload", files={"file": ("real.wav", payload, "audio/wav")}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["filename"] == "real.wav"
+    task = get_task(body["task_id"])
+    assert task is not None
+    assert task.audio_path.startswith(str(tmp_path))
+    assert os.path.exists(task.audio_path)
+    with open(task.audio_path, "rb") as f:
+        assert f.read() == payload
+
+
+def test_upload_content_length_precheck_returns_413_and_no_disk_write(client, monkeypatch):
+    monkeypatch.setattr(settings, "max_upload_bytes", 10)
+    payload = b"RIFF" + b"\x00" * 64
+    resp = client.post(
+        "/api/upload", files={"file": ("small.wav", payload, "audio/wav")}
+    )
+    assert resp.status_code == 413
+    assert resp.json() == {"detail": "文件超过 0MB 限制"}
+    assert os.listdir(settings.upload_dir) == []
+
+
+def test_upload_mp3_magic_mismatch_returns_400(client):
+    resp = client.post(
+        "/api/upload",
+        files={"file": ("fake.mp3", b"MZ" + b"\x00" * 32, "audio/mpeg")},
+    )
+    assert resp.status_code == 400
+    assert resp.json() == {"detail": MAGIC_MISMATCH_DETAIL}
+    assert os.listdir(settings.upload_dir) == []

@@ -2,7 +2,7 @@ import contextlib
 import os
 import uuid
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from backend.app.config import settings
 from backend.app.models.schemas import TaskInfo, UploadResponse
@@ -20,8 +20,45 @@ def _allowed_file(filename: str) -> bool:
     return ext in ALLOWED_EXTENSIONS
 
 
+def _is_valid_magic(ext: str, header: bytes) -> bool:
+    """Check whether *header* matches the expected container for *ext*.
+
+    Empty header is treated as valid here so the downstream empty-file branch
+    can emit its dedicated「空文件」message; otherwise magic mismatch returns
+    the generic「文件内容与音频格式不符」error.
+    """
+    if len(header) == 0:
+        return True
+    # Per-extension allowlist
+    if ext == ".wav":
+        return header.startswith(b"RIFF")
+    if ext == ".flac":
+        return header.startswith(b"fLaC")
+    if ext in (".ogg", ".oga", ".opus"):
+        return header.startswith(b"OggS")
+    if ext == ".mp3":
+        return header.startswith(b"ID3") or (
+            len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0
+        )
+    if ext in (".m4a", ".mp4", ".mov"):
+        return len(header) >= 8 and header[4:8] == b"ftyp"
+    # Fallback for remaining ALLOWED_EXTENSIONS (.webm, .aac, .wma, etc.):
+    # accept only if header matches any generic audio signature above.
+    if header.startswith(b"RIFF"):
+        return True
+    if header.startswith(b"fLaC"):
+        return True
+    if header.startswith(b"OggS"):
+        return True
+    if header.startswith(b"ID3"):
+        return True
+    if len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0:
+        return True
+    return len(header) >= 8 and header[4:8] == b"ftyp"
+
+
 @router.post("/upload", response_model=UploadResponse)
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(request: Request, file: UploadFile = File(...)):
     if not file.filename or not _allowed_file(file.filename):
         raise HTTPException(
             status_code=400,
@@ -29,12 +66,30 @@ async def upload_file(file: UploadFile = File(...)):
         )
 
     ext = os.path.splitext(file.filename)[1].lower()
+    max_size = settings.max_upload_bytes
+
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            cl = int(content_length)
+            if cl > max_size:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"文件超过 {max_size // (1024 * 1024)}MB 限制",
+                )
+        except ValueError:
+            pass
+
+    header = await file.read(8)
+    if not _is_valid_magic(ext, header):
+        raise HTTPException(status_code=400, detail="文件内容与音频格式不符")
+    await file.seek(0)
+
     safe_name = f"{uuid.uuid4().hex[:12]}{ext}"
     filepath = os.path.join(settings.upload_dir, safe_name)
 
     written = 0
     overflow = False
-    max_size = settings.max_upload_bytes
     chunk_size = 1024 * 1024
     with open(filepath, "wb") as f:
         while True:
