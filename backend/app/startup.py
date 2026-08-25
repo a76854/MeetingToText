@@ -14,10 +14,10 @@ called, in order, by the lifespan:
    (when enabled) so the first request doesn't pay the load cost.
 """
 
-import os
-import time
 import asyncio
 import logging
+import os
+import time
 
 from backend.app.config import SETTING_SPECS, settings, settings_lock
 
@@ -25,8 +25,8 @@ logger = logging.getLogger(__name__)
 
 
 def load_user_settings() -> int:
-    from backend.app.services.store import get_store
     from backend.app.services.llm import update_llm_config
+    from backend.app.services.store import get_store
     store = get_store()
     loaded = 0
     with settings_lock:

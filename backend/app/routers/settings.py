@@ -3,11 +3,11 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from backend.app.config import SETTING_SPECS, settings, settings_lock, set_cpu_threads
-from backend.app.models.schemas import SettingsUpdate, SettingsInfo
-from backend.app.services.llm import update_llm_config
+from backend.app.config import SETTING_SPECS, set_cpu_threads, settings, settings_lock
+from backend.app.models.schemas import SettingsInfo, SettingsUpdate
 from backend.app.services.asr import unload_all_asr
 from backend.app.services.asr_streaming import StreamingASR
+from backend.app.services.llm import update_llm_config
 from backend.app.services.store import get_store
 
 router = APIRouter(prefix="/api", tags=["settings"])
@@ -34,22 +34,49 @@ async def get_settings():
         llm_base_url=s.get_setting("llm_base_url", settings.llm_base_url),
         llm_model=s.get_setting("llm_model", settings.llm_model),
         llm_api_key_set=bool(s.get_setting("llm_api_key", "")),
-        llm_temperature=float(s.get_setting("llm_temperature", str(settings.llm_temperature))),
+        llm_temperature=float(
+            s.get_setting("llm_temperature", str(settings.llm_temperature))
+        ),
         llm_max_tokens=int(s.get_setting("llm_max_tokens", str(settings.llm_max_tokens))),
         asr_model_type=s.get_setting("asr_model_type", settings.asr_model_type),
         asr_model_name=s.get_setting("asr_model_name", settings.asr_model_name),
-        asr_needs_punc=(s.get_setting("asr_needs_punc", str(settings.asr_needs_punc)).lower() == "true"),
+        asr_needs_punc=(
+            s.get_setting("asr_needs_punc", str(settings.asr_needs_punc)).lower() == "true"
+        ),
         ncpu=int(s.get_setting("ncpu", str(settings.ncpu))),
-        asr_batch_size_s=int(s.get_setting("asr_batch_size_s", str(settings.asr_batch_size_s))),
-        asr_merge_length_s=float(s.get_setting("asr_merge_length_s", str(settings.asr_merge_length_s))),
+        asr_batch_size_s=int(
+            s.get_setting("asr_batch_size_s", str(settings.asr_batch_size_s))
+        ),
+        asr_merge_length_s=float(
+            s.get_setting("asr_merge_length_s", str(settings.asr_merge_length_s))
+        ),
         # C2: bool defaults derive from the runtime settings object so
         # MTT_* env overrides are visible in the UI, and every stored value
         # parses with the same .lower() == "true" rule.
-        asr_merge_vad=(s.get_setting("asr_merge_vad", str(settings.asr_merge_vad)).lower() == "true"),
-        asr_max_single_segment_time=int(s.get_setting("asr_max_single_segment_time", str(settings.asr_max_single_segment_time))),
-        streaming_asr_enabled=(s.get_setting("streaming_asr_enabled", str(settings.streaming_asr_enabled)).lower() == "true"),
-        streaming_asr_model_name=s.get_setting("streaming_asr_model_name", settings.streaming_asr_model_name),
-        browser_noise_suppression=(s.get_setting("browser_noise_suppression", str(settings.browser_noise_suppression)).lower() == "true"),
+        asr_merge_vad=(
+            s.get_setting("asr_merge_vad", str(settings.asr_merge_vad)).lower() == "true"
+        ),
+        asr_max_single_segment_time=int(
+            s.get_setting(
+                "asr_max_single_segment_time",
+                str(settings.asr_max_single_segment_time),
+            )
+        ),
+        streaming_asr_enabled=(
+            s.get_setting(
+                "streaming_asr_enabled", str(settings.streaming_asr_enabled)
+            ).lower()
+            == "true"
+        ),
+        streaming_asr_model_name=s.get_setting(
+            "streaming_asr_model_name", settings.streaming_asr_model_name
+        ),
+        browser_noise_suppression=(
+            s.get_setting(
+                "browser_noise_suppression", str(settings.browser_noise_suppression)
+            ).lower()
+            == "true"
+        ),
         audio_source=s.get_setting("audio_source", settings.audio_source),
     )
 

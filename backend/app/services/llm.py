@@ -1,5 +1,6 @@
-from openai import OpenAI
 import threading
+
+from openai import OpenAI
 
 
 class LLMClient:
@@ -7,7 +8,7 @@ class LLMClient:
         self.base_url = base_url
         self.api_key = api_key
         self.model = model
-        self._client = None
+        self._client: OpenAI | None = None
 
     @property
     def client(self) -> OpenAI:

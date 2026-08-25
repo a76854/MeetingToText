@@ -53,7 +53,7 @@ async def generate_minutes(req: GenerateRequest):
             max_tokens=settings.llm_max_tokens,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}")
+        raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}") from e
 
     get_store().save_minutes(req.task_id, minutes)
     return GenerateResponse(minutes=minutes)

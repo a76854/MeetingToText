@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class TaskStatus(str, Enum):
+class TaskStatus(StrEnum):
     pending = "pending"
     processing = "processing"
     done = "done"
@@ -47,9 +46,9 @@ class TaskInfo(BaseModel):
     audio_path: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     progress: ProgressInfo = Field(default_factory=ProgressInfo)
-    result: Optional[TaskResult] = None
-    minutes: Optional[str] = None
-    error: Optional[str] = None
+    result: TaskResult | None = None
+    minutes: str | None = None
+    error: str | None = None
 
 
 class UploadResponse(BaseModel):

@@ -1,4 +1,4 @@
-"""Recording-session orchestration: the suspend/resume/grace lifecycle.
+r"""Recording-session orchestration: the suspend/resume/grace lifecycle.
 
 A recording session itself lives in RecorderManager
 (backend/app/services/recorder.py:116-163) as a clean two-state FSM:
@@ -125,13 +125,13 @@ branch (record.py:245).
     recorder.ts ``cancelRecording`` (:763) as a safety net.
 """
 
-import os
 import asyncio
 import logging
+import os
 
 from backend.app.config import settings
-from backend.app.services.recorder import recorder_manager
 from backend.app.services.pipeline import submit_pipeline
+from backend.app.services.recorder import recorder_manager
 from backend.app.services.store import create_task
 
 logger = logging.getLogger(__name__)

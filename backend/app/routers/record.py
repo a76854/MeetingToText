@@ -9,17 +9,18 @@ explicit error frame instead of silently suspending the session (the pre-13
 behavior: json.loads failures fell into the outer catch-all).
 """
 
-import json
-import uuid
 import asyncio
+import json
 import logging
+import uuid
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
 from backend.app.config import settings
-from backend.app.services.recorder import recorder_manager
 from backend.app.services.asr_streaming import StreamingASR
 from backend.app.services.record_session import record_session_service
+from backend.app.services.recorder import recorder_manager
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +66,8 @@ class WsRecordingSession:
         self.task_id = task_id
         # Loop outcome: "stop" | "discard" | None (None => suspend on death).
         self.intent: str | None = None
-        self.streaming_session = None  # live streaming ASR session
-        self.final_streaming_session = None  # captured on cancel, finalized on stop
+        self.streaming_session: Any | None = None  # live streaming ASR session
+        self.final_streaming_session: Any | None = None  # captured on cancel
         self.audio_buffer: list[bytes] = []  # chunks buffered while the model loads
         self.sample_rate: int = 0
         self.model_loading: asyncio.Task | None = None
@@ -100,11 +101,10 @@ class WsRecordingSession:
                 if self.cancelled:
                     break
                 partial = session.add_pcm_chunk(chunk)
-                if partial:
-                    # Keep the original break-on-failed-send: a dead socket
-                    # stops the replay early (now logged instead of silent).
-                    if not await _safe_send(self.websocket, {"type": "partial", "text": partial}):
-                        break
+                if partial and not await _safe_send(
+                    self.websocket, {"type": "partial", "text": partial}
+                ):
+                    break
             logger.info(f"streaming ASR ready for task={self.task_id}")
         except Exception as e:
             logger.error(f"streaming ASR load-failed for task={self.task_id}: {e}")
@@ -226,7 +226,9 @@ async def record_websocket(websocket: WebSocket, task_id: str):
         return
     conn_id, _ = begun
 
-    liveness_timeout = LIVENESS_TIMEOUT_MULTIPLIER * max(int(settings.reconnect_grace_seconds), 0)
+    liveness_timeout: float = LIVENESS_TIMEOUT_MULTIPLIER * max(
+        int(settings.reconnect_grace_seconds), 0
+    )
     if liveness_timeout <= 0:
         liveness_timeout = 0.05
 
@@ -236,7 +238,7 @@ async def record_websocket(websocket: WebSocket, task_id: str):
         while True:
             try:
                 data = await asyncio.wait_for(websocket.receive(), timeout=liveness_timeout)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.info(
                     f"liveness timeout ({liveness_timeout}s without frames) "
                     f"for task={task_id}; suspending"

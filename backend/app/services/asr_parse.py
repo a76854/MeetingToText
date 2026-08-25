@@ -40,27 +40,35 @@ def clean_text(text: str) -> str:
 
 
 def parse_result(result: list) -> list[dict]:
-    segments = []
+    segments: list[dict] = []
     if not (isinstance(result, list) and result):
         return segments
 
     item = result[0]
-    logger.info(f"_parse_result: keys={list(item.keys())} text_len={len(str(item.get('text','')))}, si_count={len(item.get('sentence_info', []))}")
+    logger.info(
+        f"_parse_result: keys={list(item.keys())} "
+        f"text_len={len(str(item.get('text','')))}, "
+        f"si_count={len(item.get('sentence_info', []))}"
+    )
 
     for i, sent in enumerate(item.get("sentence_info", [])):
         text = sent.get("text") or sent.get("sentence") or ""
         text = clean_text(text)
         if i < 3:
-            logger.info(f"  si[{i}]: keys={list(sent.keys())} start={sent.get('start')} end={sent.get('end')} text_len={len(text)}")
+            logger.info(
+                f"  si[{i}]: keys={list(sent.keys())} "
+                f"start={sent.get('start')} end={sent.get('end')} text_len={len(text)}"
+            )
         if not text:
             continue
         start = sent.get("start") or 0
         end = sent.get("end") or 0
         spk = sent.get("spk", "")
-        if spk is not None and spk != "":
-            spk = SPEAKER_LABEL_TEMPLATE.format(int(spk) + 1)
-        else:
-            spk = ""
+        spk = (
+            SPEAKER_LABEL_TEMPLATE.format(int(spk) + 1)
+            if spk is not None and spk != ""
+            else ""
+        )
         segments.append({
             "speaker": spk,
             "text": text,
@@ -73,7 +81,10 @@ def parse_result(result: list) -> list[dict]:
         if isinstance(raw_text, str):
             raw_text = clean_text(raw_text)
         timestamps = item.get("timestamp", [])
-        logger.info(f"_parse_result fallback: raw_text_type={type(item.get('text')).__name__} ts_len={len(timestamps) if isinstance(timestamps, list) else 'N/A'}")
+        logger.info(
+            f"_parse_result fallback: raw_text_type={type(item.get('text')).__name__} "
+            f"ts_len={len(timestamps) if isinstance(timestamps, list) else 'N/A'}"
+        )
         if raw_text and isinstance(timestamps, list) and timestamps:
             texts = raw_text if isinstance(raw_text, list) else [raw_text]
             for i, ts in enumerate(timestamps):
@@ -87,5 +98,10 @@ def parse_result(result: list) -> list[dict]:
                         "start": float(ts[0] or 0) / MS_PER_S,
                         "end": float(ts[1] or 0) / MS_PER_S,
                     })
-    logger.info(f"_parse_result: produced {len(segments)} segments, range {segments[0]['start']:.1f}-{segments[-1]['end']:.1f}s" if segments else "_parse_result: 0 segments")
+    logger.info(
+        f"_parse_result: produced {len(segments)} segments, "
+        f"range {segments[0]['start']:.1f}-{segments[-1]['end']:.1f}s"
+        if segments
+        else "_parse_result: 0 segments"
+    )
     return segments

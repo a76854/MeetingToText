@@ -1,25 +1,26 @@
-import os
-import warnings
-import tempfile
+import contextlib
 import logging
-from concurrent.futures import ThreadPoolExecutor, Future
+import os
+import tempfile
+import warnings
+from concurrent.futures import Future, ThreadPoolExecutor
+
+import librosa
 import numpy as np
 import soundfile as sf
-import librosa
-
-logger = logging.getLogger(__name__)
 
 from backend.app.config import settings
 from backend.app.models.schemas import (
-    TaskStatus,
-    StepInfo,
     ProgressInfo,
-    TranscriptSegment,
+    StepInfo,
     TaskResult,
+    TaskStatus,
+    TranscriptSegment,
 )
 from backend.app.services.asr import get_asr
 from backend.app.services.store import TaskStore, get_store
 
+logger = logging.getLogger(__name__)
 
 PIPELINE_STEPS = [
     ("vad", "执行语音活动检测 (VAD)"),
@@ -91,7 +92,10 @@ def cancel_pipeline(task_id: str) -> bool:
 def _initial_progress() -> ProgressInfo:
     return ProgressInfo(
         current_step="",
-        steps=[StepInfo(name=name, status="pending", message=desc) for name, desc in PIPELINE_STEPS],
+        steps=[
+            StepInfo(name=name, status="pending", message=desc)
+            for name, desc in PIPELINE_STEPS
+        ],
         overall=PROGRESS_INITIAL,
     )
 
@@ -155,9 +159,11 @@ def _prepare_asr_input(audio_path: str) -> tuple[str, int, float]:
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message="PySoundFile failed")
             warnings.filterwarnings("ignore", category=FutureWarning, module="librosa")
-            audio_data, original_sr = librosa.load(audio_path, sr=None, mono=True)
+            audio_data, original_sr = librosa.load(  # type: ignore[assignment]
+                audio_path, sr=None, mono=True
+            )
 
-    duration = len(audio_data) / original_sr
+    duration: float = len(audio_data) / original_sr
     target_sr = settings.target_sr
 
     if original_sr == target_sr:
@@ -261,7 +267,5 @@ def run_pipeline(task_id: str):
     finally:
         _cleanup_cancelled(task_id)
         if asr_temp_path and os.path.exists(asr_temp_path):
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(asr_temp_path)
-            except OSError:
-                pass

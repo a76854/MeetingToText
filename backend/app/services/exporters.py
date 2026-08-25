@@ -63,10 +63,9 @@ def _export_md(task) -> str:
                 start = f"{start_h}:{start_m:02d}:{start_s:02d}"
             else:
                 start = f"{start_m}:{start_s:02d}"
-            if end_h:
-                end = f"{end_h}:{end_m:02d}:{end_s:02d}"
-            else:
-                end = f"{end_m}:{end_s:02d}"
+            end = (
+                f"{end_h}:{end_m:02d}:{end_s:02d}" if end_h else f"{end_m}:{end_s:02d}"
+            )
             speaker = seg.speaker or "未知"
             lines.append(f"## {i}. [{start}–{end}] {speaker}")
             lines.append("")

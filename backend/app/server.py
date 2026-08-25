@@ -11,24 +11,25 @@ No business logic lives here. Responsibilities:
 - expose `main()` as the uvicorn entrypoint.
 """
 
-import sys
-import os
 import logging
+import os
+import sys
 from contextlib import asynccontextmanager
 
 logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
-import uvicorn
+from fastapi.staticfiles import StaticFiles
 
-from backend.app.config import settings
 from backend.app import startup
-from backend.app.routers import upload, record, transcribe, generate, settings as settings_router, export, audio
+from backend.app.config import settings
+from backend.app.routers import audio, export, generate, record, transcribe, upload
+from backend.app.routers import settings as settings_router
 from backend.app.routers.health import router as health_router
 from backend.app.services.pipeline import pipeline_executor
 
@@ -82,11 +83,17 @@ app.include_router(audio.router)
 app.include_router(health_router)
 
 
-frontend_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist")
+frontend_dist = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "frontend", "dist"
+)
 _index_path = os.path.join(frontend_dist, "index.html")
 
 if os.path.isdir(frontend_dist):
-    app.mount("/assets", StaticFiles(directory=os.path.join(frontend_dist, "assets")), name="assets")
+    app.mount(
+        "/assets",
+        StaticFiles(directory=os.path.join(frontend_dist, "assets")),
+        name="assets",
+    )
 
     @app.get("/")
     async def root_fallback():
@@ -114,7 +121,9 @@ def main():
         host="0.0.0.0",
         port=8000,
         reload=True,
-        reload_dirs=[os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend")],
+        reload_dirs=[
+            os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend")
+        ],
     )
 
 

@@ -1,13 +1,14 @@
+import contextlib
 import os
 import uuid
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend.app.config import settings
+from backend.app.models.schemas import TaskInfo, UploadResponse
+from backend.app.routers.deps import TaskDep
 from backend.app.services.pipeline import cancel_pipeline
 from backend.app.services.store import create_task, get_store
-from backend.app.models.schemas import UploadResponse, TaskInfo
-from backend.app.routers.deps import TaskDep
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
@@ -22,7 +23,10 @@ def _allowed_file(filename: str) -> bool:
 @router.post("/upload", response_model=UploadResponse)
 async def upload_file(file: UploadFile = File(...)):
     if not file.filename or not _allowed_file(file.filename):
-        raise HTTPException(status_code=400, detail=f"不支持的文件格式，支持: {', '.join(ALLOWED_EXTENSIONS)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"不支持的文件格式，支持: {', '.join(ALLOWED_EXTENSIONS)}",
+        )
 
     ext = os.path.splitext(file.filename)[1].lower()
     safe_name = f"{uuid.uuid4().hex[:12]}{ext}"
@@ -44,20 +48,16 @@ async def upload_file(file: UploadFile = File(...)):
             written += len(chunk)
 
     if overflow:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(filepath)
-        except OSError:
-            pass
         raise HTTPException(
             status_code=413,
             detail=f"文件超过 {max_size // (1024 * 1024)}MB 限制",
         )
 
     if written == 0:
-        try:
+        with contextlib.suppress(OSError):
             os.remove(filepath)
-        except OSError:
-            pass
         raise HTTPException(status_code=400, detail="空文件")
 
     task = create_task(filename=file.filename, audio_path=filepath)

@@ -3,7 +3,14 @@ import sqlite3
 import threading
 
 from backend.app.config import settings
-from backend.app.models.schemas import TaskInfo, TaskStatus, ProgressInfo, TaskResult, TranscriptSegment, StepInfo
+from backend.app.models.schemas import (
+    ProgressInfo,
+    StepInfo,
+    TaskInfo,
+    TaskResult,
+    TaskStatus,
+    TranscriptSegment,
+)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
@@ -51,18 +58,27 @@ class TaskStore:
 
     def create(self, task: TaskInfo) -> TaskInfo:
         progress_json = json.dumps(task.progress.model_dump(), ensure_ascii=False)
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "INSERT INTO tasks (id, filename, audio_path, status, created_at, duration, segments, full_text, minutes, error, progress) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        task.id, task.filename, task.audio_path,
-                        task.status.value, task.created_at, 0.0, "[]", "", "", "",
-                        progress_json,
-                    ),
-                )
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute(
+                "INSERT INTO tasks "
+                "(id, filename, audio_path, status, created_at, duration, "
+                "segments, full_text, minutes, error, progress) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    task.id,
+                    task.filename,
+                    task.audio_path,
+                    task.status.value,
+                    task.created_at,
+                    0.0,
+                    "[]",
+                    "",
+                    "",
+                    "",
+                    progress_json,
+                ),
+            )
+            conn.commit()
         return task
 
     def get(self, task_id: str) -> TaskInfo | None:
@@ -73,58 +89,63 @@ class TaskStore:
         return self._row_to_task(row)
 
     def update_progress(self, task_id: str, status: TaskStatus, error: str | None = None):
-        with self._lock:
-            with self._get_conn() as conn:
-                if error is not None:
-                    conn.execute("UPDATE tasks SET status = ?, error = ? WHERE id = ?",
-                                 (status.value, error, task_id))
-                else:
-                    conn.execute("UPDATE tasks SET status = ? WHERE id = ?",
-                                 (status.value, task_id))
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            if error is not None:
+                conn.execute("UPDATE tasks SET status = ?, error = ? WHERE id = ?",
+                             (status.value, error, task_id))
+            else:
+                conn.execute("UPDATE tasks SET status = ? WHERE id = ?",
+                             (status.value, task_id))
+            conn.commit()
 
     def reset_for_retry(self, task_id: str):
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "UPDATE tasks SET status = ?, duration = ?, segments = ?, full_text = ?, minutes = ?, error = ?, progress = ? WHERE id = ?",
-                    (TaskStatus.pending.value, 0.0, "[]", "", "", "", "{}", task_id),
-                )
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute(
+                "UPDATE tasks SET status = ?, duration = ?, segments = ?, "
+                "full_text = ?, minutes = ?, error = ?, progress = ? "
+                "WHERE id = ?",
+                (TaskStatus.pending.value, 0.0, "[]", "", "", "", "{}", task_id),
+            )
+            conn.commit()
 
     def save_progress(self, task_id: str, progress: ProgressInfo):
         progress_json = json.dumps(progress.model_dump(), ensure_ascii=False)
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute("UPDATE tasks SET progress = ? WHERE id = ?",
-                             (progress_json, task_id))
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute("UPDATE tasks SET progress = ? WHERE id = ?",
+                         (progress_json, task_id))
+            conn.commit()
 
     def save_result(self, task_id: str, result: TaskResult):
-        segments_json = json.dumps([s.model_dump() for s in result.segments], ensure_ascii=False)
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "UPDATE tasks SET status = ?, duration = ?, segments = ?, full_text = ? WHERE id = ?",
-                    (TaskStatus.done.value, result.duration, segments_json, result.full_text, task_id),
-                )
-                conn.commit()
+        segments_json = json.dumps(
+            [s.model_dump() for s in result.segments], ensure_ascii=False
+        )
+        with self._lock, self._get_conn() as conn:
+            conn.execute(
+                "UPDATE tasks SET status = ?, duration = ?, "
+                "segments = ?, full_text = ? WHERE id = ?",
+                (
+                    TaskStatus.done.value,
+                    result.duration,
+                    segments_json,
+                    result.full_text,
+                    task_id,
+                ),
+            )
+            conn.commit()
 
     def save_minutes(self, task_id: str, minutes: str):
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute("UPDATE tasks SET minutes = ? WHERE id = ?", (minutes, task_id))
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute("UPDATE tasks SET minutes = ? WHERE id = ?", (minutes, task_id))
+            conn.commit()
 
     def update_segments(self, task_id: str, segments: list[TranscriptSegment], full_text: str):
         segments_json = json.dumps([s.model_dump() for s in segments], ensure_ascii=False)
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "UPDATE tasks SET segments = ?, full_text = ? WHERE id = ?",
-                    (segments_json, full_text, task_id),
-                )
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute(
+                "UPDATE tasks SET segments = ?, full_text = ? WHERE id = ?",
+                (segments_json, full_text, task_id),
+            )
+            conn.commit()
 
     def get_setting(self, key: str, default: str = "") -> str:
         with self._get_conn() as conn:
@@ -132,20 +153,19 @@ class TaskStore:
         return row["value"] if row else default
 
     def set_setting(self, key: str, value: str) -> None:
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute(
-                    "INSERT INTO app_settings (key, value) VALUES (?, ?) "
-                    "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP",
-                    (key, value),
-                )
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute(
+                "INSERT INTO app_settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+                "updated_at = CURRENT_TIMESTAMP",
+                (key, value),
+            )
+            conn.commit()
 
     def delete_setting(self, key: str) -> None:
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute("DELETE FROM app_settings WHERE key = ?", (key,))
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute("DELETE FROM app_settings WHERE key = ?", (key,))
+            conn.commit()
 
     def list_tasks(self, limit: int = 50) -> list[TaskInfo]:
         with self._get_conn() as conn:
@@ -156,26 +176,28 @@ class TaskStore:
 
     def mark_orphan_processing(self) -> int:
         count = 0
-        with self._lock:
-            with self._get_conn() as conn:
-                for status in (TaskStatus.processing.value, TaskStatus.pending.value):
-                    rows = conn.execute(
-                        "SELECT id FROM tasks WHERE status = ?", (status,)
-                    ).fetchall()
-                    for row in rows:
-                        conn.execute(
-                            "UPDATE tasks SET status = ?, error = ? WHERE id = ?",
-                            (TaskStatus.error.value, "服务器重启，转录任务中断，请重新转录", row["id"]),
-                        )
-                        count += 1
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            for status in (TaskStatus.processing.value, TaskStatus.pending.value):
+                rows = conn.execute(
+                    "SELECT id FROM tasks WHERE status = ?", (status,)
+                ).fetchall()
+                for row in rows:
+                    conn.execute(
+                        "UPDATE tasks SET status = ?, error = ? WHERE id = ?",
+                        (
+                            TaskStatus.error.value,
+                            "服务器重启，转录任务中断，请重新转录",
+                            row["id"],
+                        ),
+                    )
+                    count += 1
+            conn.commit()
         return count
 
     def delete(self, task_id: str):
-        with self._lock:
-            with self._get_conn() as conn:
-                conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
-                conn.commit()
+        with self._lock, self._get_conn() as conn:
+            conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
+            conn.commit()
 
     @staticmethod
     def _row_to_task(row: sqlite3.Row) -> TaskInfo:

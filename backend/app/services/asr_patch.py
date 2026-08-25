@@ -89,7 +89,7 @@ def apply_funasr_distribute_spk_patch() -> None:
             d["spk"] = int(sentence_spk)
         return sentence_list
 
-    _safe_distribute_spk._mt_patched = True
+    setattr(_safe_distribute_spk, "_mt_patched", True)  # noqa: B010 # setattr bypasses mypy attr-defined for function attribute
     _utils.distribute_spk = _safe_distribute_spk
     try:
         import funasr.auto.auto_model as _am

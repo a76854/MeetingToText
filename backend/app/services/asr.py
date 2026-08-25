@@ -1,7 +1,7 @@
 import os
-from abc import ABC, abstractmethod
-from typing import Optional
 import threading
+from abc import ABC, abstractmethod
+from typing import Any
 
 from backend.app.services.asr_parse import parse_result
 from backend.app.services.asr_patch import apply_funasr_distribute_spk_patch
@@ -19,6 +19,8 @@ apply_funasr_distribute_spk_patch()
 
 
 class BaseASR(ABC):
+    model: Any = None
+
     @abstractmethod
     def load_model(self):
         ...
@@ -55,6 +57,7 @@ class SenseVoiceASR(BaseASR):
 
     def load_model(self):
         from funasr import AutoModel
+
         from backend.app.config import settings
         kwargs: dict = dict(
             model=self.model_name,
@@ -77,13 +80,18 @@ class SenseVoiceASR(BaseASR):
 
 
 class ParaformerASR(BaseASR):
-    def __init__(self, model_name: str = "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch", device: str = "cpu"):
+    def __init__(
+        self,
+        model_name: str = "iic/speech_paraformer-large-vad-punc_asr_nat-zh-cn-16k-common-vocab8404-pytorch",  # noqa: E501
+        device: str = "cpu",
+    ):
         self.model_name = model_name
         self.device = device
         self.model = None
 
     def load_model(self):
         from funasr import AutoModel
+
         from backend.app.config import settings
         self.model = AutoModel(
             model=self.model_name,
@@ -108,10 +116,12 @@ asr_registry: dict[str, type[BaseASR]] = {
 }
 
 
-def create_asr(model_type: str, model_name: Optional[str] = None) -> BaseASR:
+def create_asr(model_type: str, model_name: str | None = None) -> BaseASR:
     cls = asr_registry.get(model_type)
     if cls is None:
-        raise ValueError(f"Unknown ASR model type: {model_type}. Available: {list(asr_registry.keys())}")
+        raise ValueError(
+            f"Unknown ASR model type: {model_type}. Available: {list(asr_registry.keys())}"
+        )
     kwargs = {}
     if model_name:
         kwargs["model_name"] = model_name
@@ -122,7 +132,7 @@ _asr_cache: dict[str, BaseASR] = {}
 _asr_lock = threading.Lock()
 
 
-def get_asr(model_type: str, model_name: Optional[str] = None) -> BaseASR:
+def get_asr(model_type: str, model_name: str | None = None) -> BaseASR:
     key = f"{model_type}:{model_name or ''}"
     engine = _asr_cache.get(key)
     if engine is not None:

@@ -1,7 +1,8 @@
+import contextlib
 import os
-import wave
-import time
 import shutil
+import time
+import wave
 
 from backend.app.config import settings
 
@@ -83,10 +84,8 @@ class RecorderManager:
             rec["byte_count"] += len(rec["pending"])
 
         if rec["byte_count"] == 0:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(filepath)
-            except OSError:
-                pass
             return None
 
         dest = os.path.join(settings.upload_dir, os.path.basename(filepath))
@@ -99,14 +98,10 @@ class RecorderManager:
             return False
         wf = rec["wf"]
         if wf is not None:
-            try:
+            with contextlib.suppress(Exception):
                 wf.close()
-            except Exception:
-                pass
-        try:
+        with contextlib.suppress(OSError):
             os.remove(rec["filepath"])
-        except OSError:
-            pass
         rec["pending"].clear()
         return True
 

@@ -1,8 +1,9 @@
 import os
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from pydantic_settings import BaseSettings
 
@@ -124,26 +125,80 @@ settings_lock = threading.RLock()
 _setting_defaults = Settings()
 
 SETTING_SPECS: dict[str, SettingSpec] = {
-    "llm_base_url": SettingSpec("llm_base_url", str, _setting_defaults.llm_base_url, False, True),
-    "llm_api_key": SettingSpec("llm_api_key", str, _setting_defaults.llm_api_key, True, True),
-    "llm_model": SettingSpec("llm_model", str, _setting_defaults.llm_model, False, True),
-    "llm_temperature": SettingSpec("llm_temperature", float, _setting_defaults.llm_temperature, False, True),
-    "llm_max_tokens": SettingSpec("llm_max_tokens", int, _setting_defaults.llm_max_tokens, False, True),
-    "asr_model_type": SettingSpec("asr_model_type", str, _setting_defaults.asr_model_type, False, True),
-    "asr_model_name": SettingSpec("asr_model_name", str, _setting_defaults.asr_model_name, False, True),
-    "asr_needs_punc": SettingSpec("asr_needs_punc", coerce_bool, _setting_defaults.asr_needs_punc, False, True),
+    "llm_base_url": SettingSpec(
+        "llm_base_url", str, _setting_defaults.llm_base_url, False, True
+    ),
+    "llm_api_key": SettingSpec(
+        "llm_api_key", str, _setting_defaults.llm_api_key, True, True
+    ),
+    "llm_model": SettingSpec(
+        "llm_model", str, _setting_defaults.llm_model, False, True
+    ),
+    "llm_temperature": SettingSpec(
+        "llm_temperature", float, _setting_defaults.llm_temperature, False, True
+    ),
+    "llm_max_tokens": SettingSpec(
+        "llm_max_tokens", int, _setting_defaults.llm_max_tokens, False, True
+    ),
+    "asr_model_type": SettingSpec(
+        "asr_model_type", str, _setting_defaults.asr_model_type, False, True
+    ),
+    "asr_model_name": SettingSpec(
+        "asr_model_name", str, _setting_defaults.asr_model_name, False, True
+    ),
+    "asr_needs_punc": SettingSpec(
+        "asr_needs_punc", coerce_bool, _setting_defaults.asr_needs_punc, False, True
+    ),
     "ncpu": SettingSpec("ncpu", int, _setting_defaults.ncpu, False, True),
-    "asr_batch_size_s": SettingSpec("asr_batch_size_s", int, _setting_defaults.asr_batch_size_s, False, True),
-    "asr_merge_length_s": SettingSpec("asr_merge_length_s", float, _setting_defaults.asr_merge_length_s, False, True),
-    "asr_merge_vad": SettingSpec("asr_merge_vad", coerce_bool, _setting_defaults.asr_merge_vad, False, True),
-    "asr_max_single_segment_time": SettingSpec("asr_max_single_segment_time", int, _setting_defaults.asr_max_single_segment_time, False, True),
-    "streaming_asr_enabled": SettingSpec("streaming_asr_enabled", coerce_bool, _setting_defaults.streaming_asr_enabled, False, True),
-    "streaming_asr_model_name": SettingSpec("streaming_asr_model_name", str, _setting_defaults.streaming_asr_model_name, False, True),
+    "asr_batch_size_s": SettingSpec(
+        "asr_batch_size_s", int, _setting_defaults.asr_batch_size_s, False, True
+    ),
+    "asr_merge_length_s": SettingSpec(
+        "asr_merge_length_s", float, _setting_defaults.asr_merge_length_s, False, True
+    ),
+    "asr_merge_vad": SettingSpec(
+        "asr_merge_vad", coerce_bool, _setting_defaults.asr_merge_vad, False, True
+    ),
+    "asr_max_single_segment_time": SettingSpec(
+        "asr_max_single_segment_time",
+        int,
+        _setting_defaults.asr_max_single_segment_time,
+        False,
+        True,
+    ),
+    "streaming_asr_enabled": SettingSpec(
+        "streaming_asr_enabled",
+        coerce_bool,
+        _setting_defaults.streaming_asr_enabled,
+        False,
+        True,
+    ),
+    "streaming_asr_model_name": SettingSpec(
+        "streaming_asr_model_name",
+        str,
+        _setting_defaults.streaming_asr_model_name,
+        False,
+        True,
+    ),
     # Metis F11: reconnect_grace_seconds is user-settable (startup loads it) but
     # not deletable — reflected faithfully so DELETE keeps rejecting it.
-    "reconnect_grace_seconds": SettingSpec("reconnect_grace_seconds", int, _setting_defaults.reconnect_grace_seconds, False, False),
-    "browser_noise_suppression": SettingSpec("browser_noise_suppression", coerce_bool, _setting_defaults.browser_noise_suppression, False, True),
-    "audio_source": SettingSpec("audio_source", str, _setting_defaults.audio_source, False, True),
+    "reconnect_grace_seconds": SettingSpec(
+        "reconnect_grace_seconds",
+        int,
+        _setting_defaults.reconnect_grace_seconds,
+        False,
+        False,
+    ),
+    "browser_noise_suppression": SettingSpec(
+        "browser_noise_suppression",
+        coerce_bool,
+        _setting_defaults.browser_noise_suppression,
+        False,
+        True,
+    ),
+    "audio_source": SettingSpec(
+        "audio_source", str, _setting_defaults.audio_source, False, True
+    ),
 }
 
 

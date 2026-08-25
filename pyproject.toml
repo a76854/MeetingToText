@@ -27,6 +27,8 @@ dependencies = [
 dev = [
     "pytest",
     "httpx",
+    "ruff",
+    "mypy",
 ]
 
 [project.scripts]
@@ -38,6 +40,34 @@ pythonpath = ["."]
 markers = [
     "smoke: non-hermetic end-to-end tests that download real FunASR models and use data/uploads recordings (deselect by default; run with -m smoke)",
 ]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+# B008 systematically fights FastAPI idioms (`Depends()`/`Path()` in defaults);
+# E402 in server.py is the sys.path bootstrap needed for `python server.py`.
+# Both are framework-required, suppressed only in the affected modules.
+per-file-ignores = { "backend/app/routers/deps.py" = ["B008"], "backend/app/routers/transcribe.py" = ["B008"], "backend/app/routers/upload.py" = ["B008"], "backend/app/server.py" = ["E402"], "backend/app/services/recorder.py" = ["SIM115"], "backend/app/templates/presets.py" = ["E501"] }
+
+[tool.mypy]
+python_version = "3.12"
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "funasr.*",
+    "torch.*",
+    "torchaudio.*",
+    "onnxruntime.*",
+    "modelscope.*",
+    "librosa.*",
+    "soundfile.*",
+    "numpy.*",
+]
+ignore_missing_imports = true
 
 [tool.setuptools.packages.find]
 include = ["backend*"]

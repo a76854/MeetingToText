@@ -1,7 +1,8 @@
-import threading
 import logging
-import numpy as np
+import threading
+
 import librosa
+import numpy as np
 
 from backend.app.config import settings
 
@@ -24,7 +25,7 @@ class StreamingASRSession:
     def __init__(self, model, input_sample_rate: int):
         self.model = model
         self.input_sr = input_sample_rate
-        self.cache = {}
+        self.cache: dict[str, object] = {}
         self.raw_audio = np.array([], dtype=np.float32)
         self.resampled_audio = np.array([], dtype=np.float32)
         self.partial_text = ""
@@ -135,7 +136,9 @@ class StreamingASR:
         self._load_lock = threading.Lock()
 
     @classmethod
-    def get_instance(cls, model_name: str = "paraformer-zh-streaming", device: str = "cpu") -> "StreamingASR":
+    def get_instance(
+        cls, model_name: str = "paraformer-zh-streaming", device: str = "cpu"
+    ) -> "StreamingASR":
         with cls._lock:
             if (
                 cls._instance is None

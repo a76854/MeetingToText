@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path
@@ -56,7 +55,10 @@ async def stream_progress(task_id: str):
         while True:
             task = get_task(task_id)
             if task is None:
-                yield {"event": "error", "data": json.dumps({"error": "Task not found"}, ensure_ascii=False)}
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "Task not found"}, ensure_ascii=False),
+                }
                 break
 
             current = task.status.value
@@ -74,7 +76,10 @@ async def stream_progress(task_id: str):
                     yield {"event": "done", "data": task_json}
                     break
                 elif current == TaskStatus.error.value:
-                    yield {"event": "error", "data": json.dumps({"error": task.error}, ensure_ascii=False)}
+                    yield {
+                        "event": "error",
+                        "data": json.dumps({"error": task.error}, ensure_ascii=False),
+                    }
                     break
                 else:
                     yield {"event": "progress", "data": task_json}
