@@ -388,7 +388,9 @@ def test_generate_llm_error_500_and_no_persist(env, client, monkeypatch):
     resp = client.post("/api/generate", json={"task_id": task.id})
     assert resp.status_code == 500
     detail = resp.json()["detail"]
-    assert detail.startswith("LLM 调用失败") and "boom" in detail
+    # Sanitized: generic message, never embeds raw exception text per todo 9
+    assert detail == "LLM 调用失败，请检查服务可用性或联系管理员"
+    assert "boom" not in detail
     # Failure path must not half-persist anything.
     assert env.get(task.id).minutes is None
     assert len(fake.calls) == 1

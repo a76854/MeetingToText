@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -6,10 +7,12 @@ from pydantic import BaseModel
 from backend.app.config import settings
 from backend.app.models.schemas import GenerateRequest, GenerateResponse
 from backend.app.routers.deps import TaskDep, get_task_or_404
-from backend.app.services.llm import get_llm
+from backend.app.services.llm import get_llm, map_llm_error
 from backend.app.services.store import get_store
 from backend.app.templates.presets import get_template, get_templates
 from backend.app.templates.prompts import build_minutes_messages
+
+logger = logging.getLogger(__name__)
 
 
 class UpdateMinutesRequest(BaseModel):
@@ -53,7 +56,8 @@ async def generate_minutes(req: GenerateRequest):
             max_tokens=settings.llm_max_tokens,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM 调用失败: {e}") from e
+        logger.exception("LLM generate failed")
+        raise HTTPException(status_code=500, detail=map_llm_error(e)) from e
 
     get_store().save_minutes(req.task_id, minutes)
     return GenerateResponse(minutes=minutes)

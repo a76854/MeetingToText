@@ -16,7 +16,9 @@ _llm_instance is saved/restored per test so no fake (or settings-built real
 client) leaks into other suites.
 """
 
+import httpx
 import pytest
+from openai import APIConnectionError, APITimeoutError, AuthenticationError, RateLimitError
 
 pytestmark = pytest.mark.unit
 
@@ -81,10 +83,19 @@ def _isolate_llm_singleton(monkeypatch):
 def fake_sdk(monkeypatch):
     """Monkeypatch llm.OpenAI with a factory returning a recording fake."""
     fake_client = _FakeClient()
-    factory_calls = []
+    factory_calls: list[dict] = []
 
-    def fake_openai_factory(base_url=None, api_key=None, **_ignored):
-        factory_calls.append({"base_url": base_url, "api_key": api_key})
+    def fake_openai_factory(  # noqa: E501
+        base_url=None, api_key=None, timeout=None, max_retries=None, **_ignored
+    ):
+        factory_calls.append(
+            {
+                "base_url": base_url,
+                "api_key": api_key,
+                "timeout": timeout,
+                "max_retries": max_retries,
+            }
+        )
         return fake_client
 
     monkeypatch.setattr(llm, "OpenAI", fake_openai_factory)
@@ -110,7 +121,12 @@ def test_generate_success_assembles_messages_and_passes_params(fake_sdk):
     assert out == "会议纪要内容"
     # SDK boundary: the lazy client property built OpenAI() with the config.
     assert factory_calls == [
-        {"base_url": "https://fake.example/v1", "api_key": "secret-key"}
+        {
+            "base_url": "https://fake.example/v1",
+            "api_key": "secret-key",
+            "timeout": 60.0,
+            "max_retries": 2,
+        }
     ]
     # Exactly one create() call carrying assembled messages and params.
     (create_kwargs,) = fake_client.chat.completions.calls
@@ -183,3 +199,78 @@ def test_get_llm_caches_single_instance(fake_sdk):
     assert first.model == settings.llm_model
     # ...and never touched the SDK boundary (lazy client still unbuilt).
     assert first._client is None
+
+
+def test_client_construction_sets_timeout_and_retries(fake_sdk):
+    fake_client, factory_calls = fake_sdk
+    client = llm.LLMClient(base_url="https://x.example", api_key="k", model="m")
+    _ = client.client  # trigger lazy OpenAI construction
+    assert factory_calls[0]["timeout"] == 60.0
+    assert factory_calls[0]["max_retries"] == 2
+
+
+# ------------------------------------------------------------------ map_llm_error
+
+
+def _make_auth_error() -> AuthenticationError:
+    req = httpx.Request("GET", "https://api.example/v1/chat/completions")
+    resp = httpx.Response(401, request=req)
+    return AuthenticationError(message="invalid key xyz", response=resp, body=None)
+
+
+def _make_rate_limit_error() -> RateLimitError:
+    req = httpx.Request("GET", "https://api.example/v1/chat/completions")
+    resp = httpx.Response(429, request=req)
+    return RateLimitError(message="rate limited detail xyz", response=resp, body=None)
+
+
+def test_map_llm_error_timeout():
+    req = httpx.Request("GET", "https://api.example/v1/chat/completions")
+    exc = APITimeoutError(request=req)
+    msg = llm.map_llm_error(exc)
+    assert msg == "连接 LLM 服务失败，请检查网络或稍后重试"
+    assert "xyz" not in msg and str(exc) not in msg
+
+
+def test_map_llm_error_connection():
+    req = httpx.Request("GET", "https://api.example/v1/chat/completions")
+    exc = APIConnectionError(request=req)
+    msg = llm.map_llm_error(exc)
+    assert msg == "连接 LLM 服务失败，请检查网络或稍后重试"
+
+
+def test_map_llm_error_authentication():
+    exc = _make_auth_error()
+    msg = llm.map_llm_error(exc)
+    assert msg == "LLM API Key 无效或未授权，请在设置中检查"
+    # Must not leak raw exception text (which contains "invalid key xyz")
+    assert "invalid key" not in msg
+    assert "xyz" not in msg
+
+
+def test_map_llm_error_rate_limit():
+    exc = _make_rate_limit_error()
+    msg = llm.map_llm_error(exc)
+    assert msg == "LLM 服务请求过于频繁，请稍后重试"
+    assert "rate limited" not in msg
+
+
+def test_map_llm_error_fallback_generic():
+    exc = RuntimeError("boom secret sk-12345")
+    msg = llm.map_llm_error(exc)
+    assert msg == "LLM 调用失败，请检查服务可用性或联系管理员"
+    assert "boom" not in msg
+    assert "sk-12345" not in msg
+
+
+def test_map_llm_error_fallback_malformed_custom():
+    # Adversarial: weird custom exception shape must still fall back generically
+    class WeirdError(Exception):
+        def __str__(self):
+            return "weird payload with key=sk-weird and url=https://evil"
+
+    exc: Exception = WeirdError()
+    msg = llm.map_llm_error(exc)
+    assert msg == "LLM 调用失败，请检查服务可用性或联系管理员"
+    assert "weird" not in msg
+    assert "sk-weird" not in msg
