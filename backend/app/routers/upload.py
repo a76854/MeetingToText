@@ -3,6 +3,7 @@ import os
 import uuid
 
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from pydantic import BaseModel
 
 from backend.app.config import settings
 from backend.app.models.schemas import TaskInfo, UploadResponse
@@ -125,6 +126,10 @@ async def upload_file(request: Request, file: UploadFile = File(...)):
     return UploadResponse(task_id=task.id, filename=file.filename)
 
 
+class RenameRequest(BaseModel):
+    name: str
+
+
 @router.get("/tasks")
 async def list_tasks(limit: int = 50):
     tasks = get_store().list_tasks(limit=limit)
@@ -133,6 +138,7 @@ async def list_tasks(limit: int = 50):
             {
                 "id": t.id,
                 "filename": t.filename,
+                "name": t.name or "",
                 "status": t.status.value,
                 "created_at": t.created_at,
                 "duration": t.result.duration if t.result else 0.0,
@@ -160,3 +166,12 @@ async def delete_task(task_id: str, task: TaskDep):
         pass
     get_store().delete(task_id)
     return {"status": "ok"}
+
+
+@router.put("/task/{task_id}/name")
+async def rename_task(task_id: str, body: RenameRequest, task: TaskDep):
+    normalized = body.name.strip()
+    if len(normalized) > 200:
+        raise HTTPException(status_code=400, detail="名称不能超过200字符")
+    get_store().rename(task_id, normalized)
+    return {"status": "ok", "name": normalized}

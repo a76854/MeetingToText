@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { h, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   NCard,
   NButton,
+  NInput,
   NSpace,
   NTag,
   NSpin,
@@ -63,10 +64,47 @@ function goToMinutes(t: TaskListItem) {
   router.push(`/minutes/${t.id}`)
 }
 
+function displayName(t: TaskListItem): string {
+  return t.name || t.filename
+}
+
+function renameTask(t: TaskListItem) {
+  let inputValue = t.name || ''
+  dialog.create({
+    title: '重命名',
+    content: () =>
+      h(NInput, {
+        placeholder: '输入显示名称（留空则显示文件名）',
+        defaultValue: t.name || '',
+        maxlength: 200,
+        'onUpdate:value': (v: string) => {
+          inputValue = v
+        },
+      }),
+    positiveText: '保存',
+    negativeText: '取消',
+    onPositiveClick: async () => {
+      const normalized = inputValue.trim()
+      if (normalized.length > 200) {
+        message.error('名称不能超过200字符')
+        return false
+      }
+      try {
+        const res = await api.renameTask(t.id, normalized)
+        t.name = res.name
+        message.success('已重命名')
+      } catch (e: any) {
+        message.error(e.message || '重命名失败')
+        return false
+      }
+    },
+  })
+}
+
 function removeTask(t: TaskListItem) {
   dialog.warning({
     title: '确认删除',
-    content: `确认删除「${t.filename}」？此操作不可撤销。`,
+    content: `确认删除「${displayName(t)}」？此操作不可撤销。`,
     positiveText: '删除',
     negativeText: '取消',
     onPositiveClick: async () => {
@@ -161,7 +199,7 @@ function removeTask(t: TaskListItem) {
             </div>
             <div style="flex: 1; min-width: 0;">
               <NText style="font-size: 14px; font-weight: 500; display: block; margin-bottom: 4px;">
-                {{ t.filename }}
+                {{ t.name || t.filename }}
               </NText>
               <NSpace
                 align="center"
@@ -201,6 +239,12 @@ function removeTask(t: TaskListItem) {
               :size="8"
               @click.stop
             >
+              <NButton
+                size="small"
+                @click.stop="renameTask(t)"
+              >
+                重命名
+              </NButton>
               <NButton
                 v-if="t.has_minutes"
                 size="small"

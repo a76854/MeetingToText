@@ -16,6 +16,7 @@ export interface TaskInfo {
   id: string
   status: string
   filename: string
+  name?: string
   audio_path?: string
   created_at?: string
   progress?: { current_step: string; steps: { name: string; status: string; message: string }[]; overall: number }
@@ -62,6 +63,7 @@ export interface SettingsData {
 export interface TaskListItem {
   id: string
   filename: string
+  name?: string
   status: string
   created_at: string
   duration: number
@@ -131,6 +133,9 @@ export const api = {
 
   deleteSetting: (key: string): Promise<{ status: string }> =>
     request(`/settings/${encodeURIComponent(key)}`, { method: 'DELETE' }),
+
+  renameTask: (id: string, name: string): Promise<{ status: string; name: string }> =>
+    request(`/task/${id}/name`, { method: 'PUT', body: JSON.stringify({ name }) }),
 
   exportUrl: (id: string, format: string) => `${API_BASE}/export/${id}?format=${encodeURIComponent(format)}`,
 

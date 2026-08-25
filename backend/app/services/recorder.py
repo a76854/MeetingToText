@@ -3,6 +3,7 @@ import os
 import shutil
 import time
 import wave
+from datetime import datetime
 
 from backend.app.config import settings
 
@@ -21,7 +22,9 @@ class RecorderManager:
         existing = self._active_recordings.get(task_id)
         if existing is not None:
             return existing["filepath"]
-        filepath = os.path.join(settings.temp_dir, f"record_{task_id}_{int(time.time())}.wav")
+        filepath = os.path.join(
+            settings.temp_dir, f"record_{task_id}_{datetime.now().strftime('%y%m%d%H%M%S')}.wav"
+        )
         self._active_recordings[task_id] = {
             "filepath": filepath,
             "wf": None,

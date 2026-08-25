@@ -16,6 +16,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS tasks (
     id TEXT PRIMARY KEY,
     filename TEXT NOT NULL,
+    name TEXT DEFAULT '',
     audio_path TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT NOT NULL,
@@ -47,6 +48,8 @@ class TaskStore:
             cols = {row["name"] for row in conn.execute("PRAGMA table_info(tasks)").fetchall()}
             if "progress" not in cols:
                 conn.execute("ALTER TABLE tasks ADD COLUMN progress TEXT DEFAULT '{}'")
+            if "name" not in cols:
+                conn.execute("ALTER TABLE tasks ADD COLUMN name TEXT DEFAULT ''")
             conn.commit()
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -61,12 +64,13 @@ class TaskStore:
         with self._lock, self._get_conn() as conn:
             conn.execute(
                 "INSERT INTO tasks "
-                "(id, filename, audio_path, status, created_at, duration, "
+                "(id, filename, name, audio_path, status, created_at, duration, "
                 "segments, full_text, minutes, error, progress) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     task.id,
                     task.filename,
+                    task.name or "",
                     task.audio_path,
                     task.status.value,
                     task.created_at,
@@ -199,6 +203,11 @@ class TaskStore:
             conn.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
             conn.commit()
 
+    def rename(self, task_id: str, name: str) -> None:
+        with self._lock, self._get_conn() as conn:
+            conn.execute("UPDATE tasks SET name = ? WHERE id = ?", (name, task_id))
+            conn.commit()
+
     @staticmethod
     def _row_to_task(row: sqlite3.Row) -> TaskInfo:
         segments_raw = json.loads(row["segments"] or "[]")
@@ -221,10 +230,16 @@ class TaskStore:
         except Exception:
             pass
 
+        # Back-compat: old DBs may lack name column until migration runs
+        try:
+            name_val = row["name"] or ""
+        except (IndexError, KeyError):
+            name_val = ""
         return TaskInfo(
             id=row["id"],
             status=TaskStatus(row["status"]),
             filename=row["filename"],
+            name=name_val,
             audio_path=row["audio_path"],
             created_at=row["created_at"],
             progress=progress,
@@ -255,3 +270,7 @@ def get_task(task_id: str) -> TaskInfo | None:
 def create_task(filename: str, audio_path: str) -> TaskInfo:
     """Task-create facade so upload/record routers don't import the pipeline executor."""
     return get_store().create(TaskInfo(filename=filename, audio_path=audio_path))
+
+
+def rename_task(task_id: str, name: str) -> None:
+    get_store().rename(task_id, name)

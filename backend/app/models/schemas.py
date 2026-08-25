@@ -43,6 +43,7 @@ class TaskInfo(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     status: TaskStatus = TaskStatus.pending
     filename: str = ""
+    name: str = ""
     audio_path: str = ""
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     progress: ProgressInfo = Field(default_factory=ProgressInfo)
