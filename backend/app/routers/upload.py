@@ -5,8 +5,9 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from backend.app.config import settings
 from backend.app.services.pipeline import cancel_pipeline
-from backend.app.services.store import create_task, get_store, get_task
+from backend.app.services.store import create_task, get_store
 from backend.app.models.schemas import UploadResponse, TaskInfo
+from backend.app.routers.deps import TaskDep
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
@@ -84,18 +85,12 @@ async def list_tasks(limit: int = 50):
 
 
 @router.get("/task/{task_id}", response_model=TaskInfo)
-async def get_task_info(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def get_task_info(task: TaskDep):
     return task
 
 
 @router.delete("/task/{task_id}")
-async def delete_task(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def delete_task(task_id: str, task: TaskDep):
     cancel_pipeline(task_id)
     try:
         if task.audio_path and os.path.exists(task.audio_path):
@@ -103,4 +98,4 @@ async def delete_task(task_id: str):
     except OSError:
         pass
     get_store().delete(task_id)
-    return {"status": "ok", "task_id": task_id}
+    return {"status": "ok"}

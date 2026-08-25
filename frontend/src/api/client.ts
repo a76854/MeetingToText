@@ -81,7 +81,7 @@ export const api = {
 
   listTasks: (): Promise<{ tasks: TaskListItem[] }> => request(`/tasks`),
 
-  deleteTask: (id: string): Promise<{ status: string; task_id: string }> =>
+  deleteTask: (id: string): Promise<{ status: string }> =>
     request(`/task/${id}`, { method: 'DELETE' }),
 
   deleteRecordingSession: (taskId: string): Promise<{ status: string }> =>
@@ -129,7 +129,7 @@ export const api = {
   updateSettings: (s: Record<string, any>): Promise<{ status: string }> =>
     request('/settings', { method: 'POST', body: JSON.stringify(s) }),
 
-  deleteSetting: (key: string): Promise<{ status: string; key: string }> =>
+  deleteSetting: (key: string): Promise<{ status: string }> =>
     request(`/settings/${encodeURIComponent(key)}`, { method: 'DELETE' }),
 
   exportUrl: (id: string, format: string) => `${BASE}/export/${id}?format=${encodeURIComponent(format)}`,

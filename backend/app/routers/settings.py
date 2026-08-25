@@ -129,4 +129,4 @@ async def delete_setting(key: str):
         # Rebuild the cached LLM client from the reset values so a deleted
         # llm_api_key can't keep serving generate requests.
         update_llm_config(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
-    return {"status": "ok", "key": key}
+    return {"status": "ok"}
