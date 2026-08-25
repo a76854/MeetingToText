@@ -115,16 +115,49 @@ if os.path.isdir(frontend_dist):
         return FileResponse(_index_path)
 
 
-def main():
-    uvicorn.run(
-        "backend.app.server:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True,
-        reload_dirs=[
+def serve(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    workers: int = 1,
+    reload: bool = False,
+    log_level: str = "INFO",
+    log_file: str | None = None,
+    log_config: dict | None = None,
+) -> None:
+    """Run uvicorn for the assembled app.
+
+    Parameters are wired from :mod:`backend.app.cli` so that ``meetingtotext``
+    / ``python main.py`` share a single code path. ``log_file`` is accepted
+    for forward-compatibility (todo-8 wires a dictConfig); today it is unused
+    beyond being part of the stable signature.
+    """
+
+    _ = log_file  # reserved for todo-8 dictConfig wiring
+    kwargs: dict = {}
+    if log_config is not None:
+        kwargs["log_config"] = log_config
+    uv_level = log_level.lower() if isinstance(log_level, str) else "info"
+    run_kwargs: dict = {
+        "host": host,
+        "port": port,
+        "workers": workers,
+        "reload": reload,
+        "log_level": uv_level,
+    }
+    run_kwargs.update(kwargs)
+    if reload:
+        run_kwargs["reload_dirs"] = [
             os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "backend")
-        ],
-    )
+        ]
+    uvicorn.run("backend.app.server:app", **run_kwargs)
+
+
+def main() -> None:
+    """Thin alias — real entrypoint is :mod:`backend.app.cli`."""
+
+    from backend.app.cli import main as cli_main
+
+    cli_main()
 
 
 if __name__ == "__main__":
