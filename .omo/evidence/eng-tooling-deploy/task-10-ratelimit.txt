@@ -1,0 +1,190 @@
+=== BASELINE ===
+git status --porcelain (before task): clean (no output) — verified at task start
+75b2d35 feat(logging): central logging config with level, file location, and rotation
+3382b4c docs(security): document bind address and plaintext-secret tradeoffs
+3b7ff6a style(cli): satisfy lint rules in daemon implementation
+
+pytest baseline recorded: 175 passed, 4 deselected (pre-task); after: 183 passed, 4 deselected
+
+=== RUFF & MYPY ===
+All checks passed!
+ruff exit 0
+backend/app/services/recorder.py:18: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+backend/app/services/asr.py:62: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+backend/app/routers/transcribe.py:54: note: By default the bodies of untyped functions are not checked, consider using --check-untyped-defs  [annotation-unchecked]
+Success: no issues found in 34 source files
+mypy exit 0
+
+=== GREP slowapi/redis ===
+0
+count should be 0
+
+=== TEST_RATELIMIT.PY ===
+........                                                                 [100%]
+=============================== warnings summary ===============================
+../../miniforge3/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/huiguo/miniforge3/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+8 passed, 1 warning in 2.13s
+
+=== FULL REGRESSION ===
+../../miniforge3/lib/python3.12/site-packages/fastapi/testclient.py:1
+  /home/huiguo/miniforge3/lib/python3.12/site-packages/fastapi/testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+../../miniforge3/lib/python3.12/site-packages/pydub/utils.py:14
+  /home/huiguo/miniforge3/lib/python3.12/site-packages/pydub/utils.py:14: DeprecationWarning: 'audioop' is deprecated and slated for removal in Python 3.13
+    import audioop
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+183 passed, 4 deselected, 2 warnings in 18.53s
+
+=== ENV & RESOLVED RPM ===
+MTT_RATE_LIMIT_RPM env (unset => default 60): '<unset>'
+resolved rpm: 60
+
+=== LIVE PROOF (61 requests) ===
+PID=30369
+ready after 10 sec
+PID2=30434
+port open after 11
+loop 61 requests:
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+200
+429
+uniq -c:
+     60 200
+      1 429
+sample 429 body + headers:
+HTTP/1.1 429 Too Many Requests
+date: Tue, 25 Aug 2026 10:46:41 GMT
+server: uvicorn
+content-type: application/json
+content-length: 86
+retry-after: 59
+
+{"detail": "\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5"}rate limit INFO log:
+2026-08-25 18:46:38 backend.app.middleware.ratelimit INFO rate limiting enabled: 60 req/60s per IP (fixed-window, in-memory; exact only with --workers 1; workers>1 multiplies effective limit)
+killing 30434
+port freed OK
+log tail:
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44792 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44798 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44806 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44810 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44818 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44828 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44830 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44832 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44834 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44848 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44852 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44864 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44876 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44888 - "GET /api/health HTTP/1.1" 200
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44890 - "GET /api/health HTTP/1.1" 429
+2026-08-25 18:46:42 uvicorn.access INFO 127.0.0.1:44904 - "GET /api/health HTTP/1.1" 429
+2026-08-25 18:46:42 uvicorn.error INFO Shutting down
+2026-08-25 18:46:42 uvicorn.error INFO Waiting for application shutdown.
+2026-08-25 18:46:42 uvicorn.error INFO Application shutdown complete.
+2026-08-25 18:46:42 uvicorn.error INFO Finished server process [30434]
+
+=== CORS 429 PROOF ===
+HTTP/1.1 429 Too Many Requests
+date: Tue, 25 Aug 2026 10:46:09 GMT
+server: uvicorn
+content-type: application/json
+content-length: 86
+retry-after: 59
+access-control-allow-origin: *
+
+{"detail": "\u8bf7\u6c42\u8fc7\u4e8e\u9891\u7e41\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5"}
+=== ADDITIONAL CHECKS ===
+429 body shape: {"detail": "请求过于频繁，请稍后重试"} verified
+Retry-After header present: verified via curl -i output above
+Thread-safety: threading.Lock + dict under lock documented in module docstring
+Injectable clock: _now: Callable[[], float] = time.time verified
+Per-process caveat INFO log: present in live log
+
+=== DIRTY_WORKTREE ===
+ M README.md
+ M backend/app/server.py
+?? backend/app/middleware/
+initial status clean: verified at baseline (no porcelain output)
+
+=== STALE_STATE ===
+env value used: <unset> => resolved rpm 60
+
+=== FLAKY_TESTS ===
+injected clock makes rollover deterministic; no real sleeps in tests — verified in test_ratelimit.py
+
+=== MISLEADING_SUCCESS_OUTPUT ===
+live 61-request uniq -c transcript IS the proof (not just TestClient) — see LIVE PROOF section
+
+=== CLEANUP RECEIPT ===
+killed PID 30434 + port freed OK — see LIVE PROOF tail
+
+=== FILES CHANGED ===
+ README.md             | 1 +
+ backend/app/server.py | 5 +++++
+ 2 files changed, 6 insertions(+)

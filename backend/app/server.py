@@ -73,6 +73,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Rate limiting (todo 10): fixed-window in-memory; exact only with --workers 1 ---  # noqa: E501
+from backend.app.middleware.ratelimit import RateLimitMiddleware  # noqa: E402
+
+app.add_middleware(RateLimitMiddleware)
+
 app.include_router(upload.router)
 app.include_router(record.router)
 app.include_router(transcribe.router)
