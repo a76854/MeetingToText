@@ -81,3 +81,9 @@ cd frontend && npm run dev
 |---|---|---|
 | `MTT_DATA_DIR` | `./data` | 数据根目录 |
 | `MODELSCOPE_CACHE` | `./data/models` | 模型缓存目录 |
+| `MTT_HOST` | `127.0.0.1` | 绑定地址（容器/LAN 部署设 `0.0.0.0`） |
+| `MTT_PORT` | `8000` | 监听端口 |
+| `MTT_RELOAD` | 关闭 | truthy 值（`1`/`true`/`yes`）开启热重载 |
+| `MTT_LOG_LEVEL` | `INFO` | 日志级别（DEBUG/INFO/WARNING/ERROR） |
+| `MTT_LOG_FILE` | 空（仅控制台） | 日志文件路径，非空时写入磁盘 |
+| `MTT_HEALTH_MIN_DISK_MB` | `100` | 健康探针磁盘可用空间阈值（MB），低于返回 503 |

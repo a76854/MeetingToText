@@ -69,3 +69,48 @@
 12. **`backend/app/services/asr_patch.py`** — FunASR vendor patch：理解为什么需要猴子补丁以及上游缺陷。
 13. **`backend/app/services/record_session.py`** — 录音会话服务：grace timer、finalize 编排，理解重连策略。
 14. **`backend/app/routers/record.py`** — WebSocket 录音端点：帧处理、重连、liveness 检测，最复杂的单文件。
+
+---
+
+## 部署安全要点
+
+### 绑定地址策略
+
+| 场景 | 默认行为 | 说明 |
+|------|----------|------|
+| `meetingtotext serve`（无 --host） | `127.0.0.1` | 仅本机可达，开发环境安全 (`cli.py:42`) |
+| `--host 0.0.0.0` 或 `MTT_HOST=0.0.0.0` | 所有接口 | **仅限容器/局域网部署** |
+
+**0.0.0.0 绑定注意事项：** 暴露到公网前必须配合以下任一措施：防火墙只放行受信 IP、反向代理（nginx/Caddy）前端鉴权、或 VPN/Tailscale 等零信任网络。裸跑 `--host 0.0.0.0` 等于把 FastAPI 无认证接口直接暴露给互联网。
+
+环境变量 `MTT_HOST` 可覆盖默认绑定地址（`cli.py:42`），`MTT_PORT` 覆盖端口（默认 8000，`cli.py:43`）。
+
+### 密钥明文落盘风险
+
+LLM API Key 以**明文**存储在 SQLite `app_settings` 表中（`store.py:29-33`，`value TEXT NOT NULL`）。
+
+**为什么明文：** 本项目是单用户教学应用，不引入 KMS/Vault 等外部密钥管理系统——超出教学范围。加密落盘需要额外依赖和运维复杂度，对"课上跑通"场景收益不高。
+
+**风险：** `data/meetingtotext.db` 文件泄露即暴露 API Key。攻击者可凭此调用 LLM 产生费用。
+
+**已实现的缓解措施：**
+
+| 措施 | 位置 | 说明 |
+|------|------|------|
+| `MTT_LLM_API_KEY` 环境变量 | `config.py:33` (`env_prefix="MTT_"`) + `:54` | 环境变量优先级高于 DB 存储；客户端启动时自动注入，Key 不经 DB |
+| GET `/api/settings` 脱敏 | `routers/settings.py:36` | 返回 `llm_api_key_set` 布尔值，**不返回原始 Key** |
+| SettingSpec `sensitive=True` | `config.py:131-132` | 标记为敏感字段，供 UI 层区分展示 |
+
+**运维建议：** 生产部署优先使用 `MTT_LLM_API_KEY` 环境变量而非 Web 界面保存。若必须存 DB，确保 `data/` 目录权限为 `700`（`chmod 700 data/`）。
+
+### 已内置的安全加固清单
+
+以下加固措施已随代码交付（截至 HEAD 3b7ff6a）：
+
+| 加固项 | 提交 | 位置 |
+|--------|------|------|
+| 上传 Content-Length 预检 + 魔数校验 | `b465261` | `routers/upload.py:71-86`（Content-Length 预检 :71-81；8 字节魔数嗅探 :83-86） |
+| 真就绪探针（DB + 磁盘） | `c8190e1` | `routers/health.py:21-70`（DB SELECT 1 :25-32；disk_usage 低于阈值 :35-52 返回 503） |
+| argparse CLI 安全默认值 | `cli.py` | 默认 `127.0.0.1:8000`、`reload=False`、`workers=1`、`MTT_HEALTH_MIN_DISK_MB=100` |
+
+**尚未实现（后续 TODO）：** API 限流（rate limiting）、CORS 可配置白名单。这两项会各自带独立提交与文档扩展。
