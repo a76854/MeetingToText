@@ -37,6 +37,8 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from backend.app.config import cors_origins_from_env
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_RPM: int = 60
@@ -217,18 +219,13 @@ class RateLimitMiddleware:
                     origin = None
                 break
         if origin is not None:
-            raw_cors = os.getenv("MTT_CORS_ORIGINS", "*")
-            # Current server.py hardcodes ["*"]; future todo 12 will set
-            # MTT_CORS_ORIGINS="http://localhost:5173,http://localhost:8000".
-            # Handle both: "*" means allow all, otherwise check allowlist.
-            if raw_cors.strip() == "" or raw_cors.strip() == "*":
+            allowlist = cors_origins_from_env()
+            if "*" in allowlist:
                 headers.append((b"access-control-allow-origin", b"*"))
-            else:
-                allowlist = [o.strip() for o in raw_cors.split(",") if o.strip()]
-                if origin in allowlist or "*" in allowlist:
-                    headers.append(
-                        (b"access-control-allow-origin", origin.encode("latin-1"))
-                    )
+            elif origin in allowlist:
+                headers.append(
+                    (b"access-control-allow-origin", origin.encode("latin-1"))
+                )
         await send(
             {
                 "type": "http.response.start",

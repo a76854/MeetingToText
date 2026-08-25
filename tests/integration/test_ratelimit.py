@@ -216,3 +216,55 @@ def test_ratelimit_retry_after_is_seconds_to_window_reset() -> None:
     # One more second rolls the window.
     clock.advance(1)
     assert limiter.is_allowed("5.5.5.5")[0] is True
+
+
+def test_ratelimit_concurrent_hits_lock_integrity() -> None:
+    import threading
+
+    limiter = InMemoryRateLimiter(rpm=50)
+    errors: list[BaseException] = []
+    admitted: list[int] = []
+
+    def _hammer() -> None:
+        count = 0
+        try:
+            for _ in range(10):
+                allowed, _ = limiter.is_allowed("9.9.9.9")
+                if allowed:
+                    count += 1
+        except BaseException as exc:
+            errors.append(exc)
+        admitted.append(count)
+
+    threads = [threading.Thread(target=_hammer) for _ in range(10)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    assert errors == []
+    assert sum(admitted) == 50
+
+
+def test_ratelimit_429_cors_parity_evil_absent_and_allowed_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("MTT_CORS_ORIGINS", raising=False)
+    app = _make_app(rpm=1)
+    with TestClient(app) as client:
+        assert client.get("/api/health").status_code == 200
+        resp_evil = client.get(
+            "/api/health", headers={"Origin": "http://evil.example"}
+        )
+        assert resp_evil.status_code == 429
+        assert resp_evil.headers.get("access-control-allow-origin") is None
+
+    monkeypatch.delenv("MTT_CORS_ORIGINS", raising=False)
+    app2 = _make_app(rpm=1)
+    with TestClient(app2) as client2:
+        assert client2.get("/api/health").status_code == 200
+        resp_ok = client2.get(
+            "/api/health", headers={"Origin": "http://localhost:5173"}
+        )
+        assert resp_ok.status_code == 429
+        assert resp_ok.headers.get("access-control-allow-origin") == "http://localhost:5173"

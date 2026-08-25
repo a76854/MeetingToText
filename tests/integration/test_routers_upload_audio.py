@@ -235,3 +235,35 @@ def test_upload_mp3_magic_mismatch_returns_400(client):
     assert resp.status_code == 400
     assert resp.json() == {"detail": MAGIC_MISMATCH_DETAIL}
     assert os.listdir(settings.upload_dir) == []
+
+
+def test_upload_webm_valid_minimal_header_passes(client, tmp_path):
+    payload = b"\x1aE\xdf\xa3" + b"\x00" * 64
+    resp = client.post(
+        "/api/upload", files={"file": ("clip.webm", payload, "audio/webm")}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["filename"] == "clip.webm"
+    task = get_task(body["task_id"])
+    assert task is not None
+    assert task.audio_path.startswith(str(tmp_path))
+    assert os.path.exists(task.audio_path)
+    with open(task.audio_path, "rb") as f:
+        assert f.read() == payload
+
+
+def test_upload_wma_valid_minimal_header_passes(client, tmp_path):
+    payload = bytes.fromhex("3026B2758E66CF11") + b"\x00" * 64
+    resp = client.post(
+        "/api/upload", files={"file": ("clip.wma", payload, "audio/x-ms-wma")}
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["filename"] == "clip.wma"
+    task = get_task(body["task_id"])
+    assert task is not None
+    assert task.audio_path.startswith(str(tmp_path))
+    assert os.path.exists(task.audio_path)
+    with open(task.audio_path, "rb") as f:
+        assert f.read() == payload

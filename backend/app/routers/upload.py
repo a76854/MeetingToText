@@ -54,7 +54,13 @@ def _is_valid_magic(ext: str, header: bytes) -> bool:
         return True
     if len(header) >= 2 and header[0] == 0xFF and (header[1] & 0xE0) == 0xE0:
         return True
-    return len(header) >= 8 and header[4:8] == b"ftyp"
+    if len(header) >= 8 and header[4:8] == b"ftyp":
+        return True
+    # WebM/EBML container
+    if header.startswith(b"\x1aE\xdf\xa3"):
+        return True
+    # WMA/ASF container (Header GUID 3026B2758E66CF11)
+    return header.startswith(bytes.fromhex("3026B2758E66CF11"))
 
 
 @router.post("/upload", response_model=UploadResponse)
