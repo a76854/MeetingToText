@@ -80,20 +80,56 @@ async function saveEdits() {
 
 <template>
   <div>
-    <NSpace align="center" justify="space-between" style="margin-bottom: 16px;">
-      <h1 style="font-size: 24px; margin: 0;">编辑转录</h1>
+    <NSpace
+      align="center"
+      justify="space-between"
+      style="margin-bottom: 16px;"
+    >
+      <h1 style="font-size: 24px; margin: 0;">
+        编辑转录
+      </h1>
       <NSpace>
-        <NButton @click="addSegment" type="primary" ghost>+ 新增段落</NButton>
-        <NButton @click="saveEdits" type="primary" :loading="saving">保存修改</NButton>
+        <NButton
+          type="primary"
+          ghost
+          @click="addSegment"
+        >
+          + 新增段落
+        </NButton>
+        <NButton
+          type="primary"
+          :loading="saving"
+          @click="saveEdits"
+        >
+          保存修改
+        </NButton>
       </NSpace>
     </NSpace>
 
-    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
+    <NAlert
+      v-if="error"
+      type="error"
+      :title="error"
+      style="margin-bottom: 16px;"
+    />
 
     <NSpin :show="loading">
-      <NSpace v-if="!loading && !error" vertical :size="12">
-        <NCard v-for="(seg, i) in segments" :key="i" size="small">
-          <NSpace align="center" :size="8" wrap style="margin-bottom: 10px;">
+      <NSpace
+        v-if="!loading && !error"
+        vertical
+        :size="12"
+      >
+        <NCard
+          v-for="(seg, i) in segments"
+          :key="i"
+          size="small"
+        >
+          <NSpace
+            align="center"
+            :size="8"
+            wrap
+            style="margin-bottom: 10px;"
+          >
             <NInput
               v-model:value="seg.speaker"
               :placeholder="'说话人'"
@@ -123,23 +159,29 @@ async function saveEdits() {
                 size="small"
                 quaternary
                 :disabled="i === 0"
-                @click="moveSegment(i, -1)"
                 title="上移"
-              >↑</NButton>
+                @click="moveSegment(i, -1)"
+              >
+                ↑
+              </NButton>
               <NButton
                 size="small"
                 quaternary
                 :disabled="i === segments.length - 1"
-                @click="moveSegment(i, 1)"
                 title="下移"
-              >↓</NButton>
+                @click="moveSegment(i, 1)"
+              >
+                ↓
+              </NButton>
               <NButton
                 size="small"
                 quaternary
                 type="error"
-                @click="removeSegment(i)"
                 title="删除"
-              >×</NButton>
+                @click="removeSegment(i)"
+              >
+                ×
+              </NButton>
             </NSpace>
           </NSpace>
           <NInput

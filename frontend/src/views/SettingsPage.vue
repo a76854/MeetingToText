@@ -172,24 +172,54 @@ async function clearApiKey() {
 
 <template>
   <div>
-    <h1 style="font-size: 24px; margin-bottom: 16px;">设置</h1>
+    <h1 style="font-size: 24px; margin-bottom: 16px;">
+      设置
+    </h1>
 
-    <NTabs type="line" animated>
-      <NTabPane name="model" tab="模型设置">
-        <NSpace vertical :size="16">
+    <NTabs
+      type="line"
+      animated
+    >
+      <NTabPane
+        name="model"
+        tab="模型设置"
+      >
+        <NSpace
+          vertical
+          :size="16"
+        >
           <NCard title="LLM 配置 (OpenAI API)">
-            <NForm label-placement="top" :show-feedback="false">
+            <NForm
+              label-placement="top"
+              :show-feedback="false"
+            >
               <NFormItem label="API 地址">
-                <NInput v-model:value="llmBaseUrl" placeholder="https://api.deepseek.com" />
+                <NInput
+                  v-model:value="llmBaseUrl"
+                  placeholder="https://api.deepseek.com"
+                />
               </NFormItem>
               <NFormItem>
                 <template #label>
-                  <NSpace align="center" :size="8">
+                  <NSpace
+                    align="center"
+                    :size="8"
+                  >
                     <span>API Key</span>
-                    <NTag v-if="apiKeySet" type="success" size="small" round>已设置</NTag>
+                    <NTag
+                      v-if="apiKeySet"
+                      type="success"
+                      size="small"
+                      round
+                    >
+                      已设置
+                    </NTag>
                   </NSpace>
                 </template>
-                <NSpace :size="8" style="width: 100%;">
+                <NSpace
+                  :size="8"
+                  style="width: 100%;"
+                >
                   <NInput
                     v-model:value="llmApiKey"
                     type="password"
@@ -197,13 +227,21 @@ async function clearApiKey() {
                     :placeholder="apiKeySet ? '留空保留原 Key' : 'sk-...'"
                     style="flex: 1;"
                   />
-                  <NButton v-if="apiKeySet" @click="clearApiKey" type="warning" ghost>
+                  <NButton
+                    v-if="apiKeySet"
+                    type="warning"
+                    ghost
+                    @click="clearApiKey"
+                  >
                     清除
                   </NButton>
                 </NSpace>
               </NFormItem>
               <NFormItem label="模型">
-                <NInput v-model:value="llmModel" placeholder="deepseek-chat" />
+                <NInput
+                  v-model:value="llmModel"
+                  placeholder="deepseek-chat"
+                />
               </NFormItem>
               <NFormItem :label="`温度 (${llmTemperature})`">
                 <NSlider
@@ -227,38 +265,68 @@ async function clearApiKey() {
           </NCard>
 
           <NCard title="语音识别配置">
-            <NForm label-placement="top" :show-feedback="false">
+            <NForm
+              label-placement="top"
+              :show-feedback="false"
+            >
               <NFormItem label="ASR 引擎（含内置说话人分离）">
-                <NSelect v-model:value="asrModelType" :options="asrModelTypeOptions" />
+                <NSelect
+                  v-model:value="asrModelType"
+                  :options="asrModelTypeOptions"
+                />
               </NFormItem>
               <NFormItem label="ASR 模型名 (ModelScope)">
-                <NInput v-model:value="asrModelName" placeholder="iic/SenseVoiceSmall" />
+                <NInput
+                  v-model:value="asrModelName"
+                  placeholder="iic/SenseVoiceSmall"
+                />
               </NFormItem>
             </NForm>
           </NCard>
 
           <NCard title="实时转录">
-            <NForm label-placement="top" :show-feedback="false">
+            <NForm
+              label-placement="top"
+              :show-feedback="false"
+            >
               <NFormItem>
                 <NSpace align="center">
                   <NSwitch v-model:value="streamingAsrEnabled" />
                   <span>启用服务端实时转录</span>
                 </NSpace>
               </NFormItem>
-              <NFormItem v-if="streamingAsrEnabled" label="流式 ASR 模型名">
-                <NInput v-model:value="streamingAsrModelName" placeholder="paraformer-zh-streaming" />
+              <NFormItem
+                v-if="streamingAsrEnabled"
+                label="流式 ASR 模型名"
+              >
+                <NInput
+                  v-model:value="streamingAsrModelName"
+                  placeholder="paraformer-zh-streaming"
+                />
               </NFormItem>
             </NForm>
           </NCard>
         </NSpace>
       </NTabPane>
 
-      <NTabPane name="tuning" tab="识别调优">
-        <NSpace vertical :size="16">
+      <NTabPane
+        name="tuning"
+        tab="识别调优"
+      >
+        <NSpace
+          vertical
+          :size="16"
+        >
           <NCard title="计算资源">
-            <NForm label-placement="top" :show-feedback="false">
+            <NForm
+              label-placement="top"
+              :show-feedback="false"
+            >
               <NFormItem :label="`CPU 线程数 (0=自动, ${ncpu})`">
-                <NSpace vertical style="width: 100%;">
+                <NSpace
+                  vertical
+                  style="width: 100%;"
+                >
                   <NSlider
                     v-model:value="ncpu"
                     :min="0"
@@ -273,7 +341,10 @@ async function clearApiKey() {
           </NCard>
 
           <NCard title="识别参数">
-            <NForm label-placement="top" :show-feedback="false">
+            <NForm
+              label-placement="top"
+              :show-feedback="false"
+            >
               <NFormItem label="批处理时长 (秒)">
                 <NInputNumber
                   v-model:value="asrBatchSizeS"
@@ -315,8 +386,14 @@ async function clearApiKey() {
         </NSpace>
       </NTabPane>
 
-      <NTabPane name="record" tab="录制设置">
-        <NSpace vertical :size="16">
+      <NTabPane
+        name="record"
+        tab="录制设置"
+      >
+        <NSpace
+          vertical
+          :size="16"
+        >
           <NCard title="音频源">
             <NSpace vertical>
               <NSpace align="center">

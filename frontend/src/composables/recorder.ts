@@ -294,7 +294,7 @@ export async function startRecording(router: any) {
       await openPromise
     }
     client.attach()
-  } catch (e: any) {
+  } catch {
     client.close()
     localMode = true
   }
@@ -305,7 +305,7 @@ export async function startRecording(router: any) {
         if (!localMode) client.sendPcm(f32)
       })
       client.setSampleRate(capture.getSampleRate())
-    } catch (e) {
+    } catch {
       teardownAudioGraph()
       client.close()
       localMode = true
@@ -363,7 +363,7 @@ export async function stopRecording(router?: any) {
         state.value = 'idle'
         releaseWakeLock()
         return
-      } catch (e: any) {
+      } catch {
         error.value = '上传录音失败，已保存到本地下载'
         downloadBlob(`recording_${taskId.value}.webm`, blob)
         state.value = 'idle'

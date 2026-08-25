@@ -90,26 +90,67 @@ function confirmEdit() {
 
 <template>
   <div>
-    <NSpace align="center" justify="space-between" style="margin-bottom: 16px;">
-      <h1 style="font-size: 24px; margin: 0;">会议纪要</h1>
+    <NSpace
+      align="center"
+      justify="space-between"
+      style="margin-bottom: 16px;"
+    >
+      <h1 style="font-size: 24px; margin: 0;">
+        会议纪要
+      </h1>
       <NSpace>
         <template v-if="!editing">
-          <NButton size="small" @click="downloadMd" ghost>导出</NButton>
-          <NButton size="small" @click="copyToClipboard" ghost>复制</NButton>
-          <NButton size="small" type="primary" @click="startEdit">编辑</NButton>
+          <NButton
+            size="small"
+            ghost
+            @click="downloadMd"
+          >
+            导出
+          </NButton>
+          <NButton
+            size="small"
+            ghost
+            @click="copyToClipboard"
+          >
+            复制
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            @click="startEdit"
+          >
+            编辑
+          </NButton>
         </template>
         <template v-else>
-          <NButton size="small" @click="cancelEdit" ghost>取消</NButton>
-          <NButton size="small" type="primary" :loading="saving" @click="confirmEdit">保存</NButton>
+          <NButton
+            size="small"
+            ghost
+            @click="cancelEdit"
+          >
+            取消
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :loading="saving"
+            @click="confirmEdit"
+          >
+            保存
+          </NButton>
         </template>
-        </NSpace>
+      </NSpace>
     </NSpace>
 
-    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
+    <NAlert
+      v-if="error"
+      type="error"
+      :title="error"
+      style="margin-bottom: 16px;"
+    />
 
     <NSpin :show="loading">
       <NCard v-if="minutes">
-
         <NInput
           v-if="editing"
           v-model:value="minutes"
@@ -117,7 +158,10 @@ function confirmEdit() {
           :autosize="{ minRows: 10, maxRows: 60 }"
           style="font-size: 14px; line-height: 1.8; font-family: monospace;"
         />
-        <MarkdownView v-else :source="minutes" />
+        <MarkdownView
+          v-else
+          :source="minutes"
+        />
       </NCard>
     </NSpin>
   </div>

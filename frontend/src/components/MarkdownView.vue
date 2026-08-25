@@ -17,7 +17,10 @@ const html = computed(() => props.source ? sanitizeHtml(props.source) : '')
 </script>
 
 <template>
-  <div class="minutes-content" v-html="html" />
+  <div
+    class="minutes-content"
+    v-html="html"
+  />
 </template>
 
 <style scoped>

@@ -75,17 +75,43 @@ function downloadMarkdown() {
 
 <template>
   <div>
-    <NSpace align="center" justify="space-between" style="margin-bottom: 24px;">
-      <h1 style="font-size: 24px; margin: 0;">生成会议纪要</h1>
+    <NSpace
+      align="center"
+      justify="space-between"
+      style="margin-bottom: 24px;"
+    >
+      <h1 style="font-size: 24px; margin: 0;">
+        生成会议纪要
+      </h1>
       <NSpace v-if="minutes">
-        <NButton size="small" @click="goToMinutes" type="primary">查看纪要</NButton>
-        <NButton size="small" :loading="generating" @click="doGenerate" ghost>重新生成</NButton>
+        <NButton
+          size="small"
+          type="primary"
+          @click="goToMinutes"
+        >
+          查看纪要
+        </NButton>
+        <NButton
+          size="small"
+          :loading="generating"
+          ghost
+          @click="doGenerate"
+        >
+          重新生成
+        </NButton>
       </NSpace>
     </NSpace>
 
-    <NCard title="选择模板" style="margin-bottom: 16px;">
+    <NCard
+      title="选择模板"
+      style="margin-bottom: 16px;"
+    >
       <NRadioGroup v-model:value="selectedTemplate">
-        <NSpace vertical :size="10" style="width: 100%;">
+        <NSpace
+          vertical
+          :size="10"
+          style="width: 100%;"
+        >
           <NRadio
             v-for="t in templates"
             :key="t.id"
@@ -93,15 +119,22 @@ function downloadMarkdown() {
             style="width: 100%; align-items: flex-start;"
           >
             <div>
-              <div style="font-weight: 600; font-size: 14px;">{{ t.name }}</div>
-              <div style="font-size: 12px; color: #888;">{{ t.description }}</div>
+              <div style="font-weight: 600; font-size: 14px;">
+                {{ t.name }}
+              </div>
+              <div style="font-size: 12px; color: #888;">
+                {{ t.description }}
+              </div>
             </div>
           </NRadio>
         </NSpace>
       </NRadioGroup>
     </NCard>
 
-    <NCard title="额外要求（选填）" style="margin-bottom: 16px;">
+    <NCard
+      title="额外要求（选填）"
+      style="margin-bottom: 16px;"
+    >
       <NInput
         v-model:value="customInstructions"
         type="textarea"
@@ -116,19 +149,39 @@ function downloadMarkdown() {
       size="large"
       block
       :loading="generating"
-      @click="doGenerate"
       style="margin-bottom: 16px;"
+      @click="doGenerate"
     >
       {{ generating ? '生成中...' : '生成会议纪要' }}
     </NButton>
 
-    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
+    <NAlert
+      v-if="error"
+      type="error"
+      :title="error"
+      style="margin-bottom: 16px;"
+    />
 
-    <NCard v-if="minutes" title="生成结果">
+    <NCard
+      v-if="minutes"
+      title="生成结果"
+    >
       <template #header-extra>
         <NSpace>
-          <NButton size="small" @click="downloadMarkdown" ghost>下载纪要 .md</NButton>
-          <NButton size="small" @click="copyToClipboard" ghost>复制</NButton>
+          <NButton
+            size="small"
+            ghost
+            @click="downloadMarkdown"
+          >
+            下载纪要 .md
+          </NButton>
+          <NButton
+            size="small"
+            ghost
+            @click="copyToClipboard"
+          >
+            复制
+          </NButton>
         </NSpace>
       </template>
       <MarkdownView :source="minutes" />

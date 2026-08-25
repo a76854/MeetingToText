@@ -16,7 +16,9 @@ const activeName = computed(() => route.name as string)
 
 <template>
   <header class="navbar">
-    <div class="nav-brand">MeetingToText</div>
+    <div class="nav-brand">
+      MeetingToText
+    </div>
     <nav class="nav-links">
       <RouterLink
         v-for="item in navItems"

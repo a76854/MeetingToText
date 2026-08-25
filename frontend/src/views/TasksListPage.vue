@@ -84,12 +84,29 @@ function removeTask(t: TaskListItem) {
 
 <template>
   <div>
-    <NSpace align="center" justify="space-between" style="margin-bottom: 16px;">
-      <h1 style="font-size: 24px; margin: 0;">历史任务</h1>
-      <NButton @click="load" :loading="loading" ghost>刷新</NButton>
+    <NSpace
+      align="center"
+      justify="space-between"
+      style="margin-bottom: 16px;"
+    >
+      <h1 style="font-size: 24px; margin: 0;">
+        历史任务
+      </h1>
+      <NButton
+        :loading="loading"
+        ghost
+        @click="load"
+      >
+        刷新
+      </NButton>
     </NSpace>
 
-    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
+    <NAlert
+      v-if="error"
+      type="error"
+      :title="error"
+      style="margin-bottom: 16px;"
+    />
 
     <NSpin :show="loading">
       <NEmpty
@@ -99,17 +116,37 @@ function removeTask(t: TaskListItem) {
       >
         <template #extra>
           <NSpace>
-            <RouterLink to="/upload" style="text-decoration: none;">
-              <NButton type="primary" ghost>上传文件</NButton>
+            <RouterLink
+              to="/upload"
+              style="text-decoration: none;"
+            >
+              <NButton
+                type="primary"
+                ghost
+              >
+                上传文件
+              </NButton>
             </RouterLink>
-            <RouterLink to="/record" style="text-decoration: none;">
-              <NButton type="primary" ghost>录制</NButton>
+            <RouterLink
+              to="/record"
+              style="text-decoration: none;"
+            >
+              <NButton
+                type="primary"
+                ghost
+              >
+                录制
+              </NButton>
             </RouterLink>
           </NSpace>
         </template>
       </NEmpty>
 
-      <NSpace v-else vertical :size="8">
+      <NSpace
+        v-else
+        vertical
+        :size="8"
+      >
         <NCard
           v-for="t in tasks"
           :key="t.id"
@@ -126,22 +163,44 @@ function removeTask(t: TaskListItem) {
               <NText style="font-size: 14px; font-weight: 500; display: block; margin-bottom: 4px;">
                 {{ t.filename }}
               </NText>
-              <NSpace align="center" :size="8" :wrap-item="false">
-                <NTag :type="statusType(t.status)" size="small" round>
+              <NSpace
+                align="center"
+                :size="8"
+                :wrap-item="false"
+              >
+                <NTag
+                  :type="statusType(t.status)"
+                  size="small"
+                  round
+                >
                   {{ statusLabel(t.status) }}
                 </NTag>
-                <NText depth="3" style="font-size: 12px;">
+                <NText
+                  depth="3"
+                  style="font-size: 12px;"
+                >
                   {{ fmtDateTime(t.created_at) }}
                 </NText>
-                <NText v-if="t.duration" depth="3" style="font-size: 12px;">
+                <NText
+                  v-if="t.duration"
+                  depth="3"
+                  style="font-size: 12px;"
+                >
                   · {{ formatDuration(t.duration) }}
                 </NText>
               </NSpace>
-              <NText v-if="t.error" type="error" style="font-size: 12px; display: block; margin-top: 6px;">
+              <NText
+                v-if="t.error"
+                type="error"
+                style="font-size: 12px; display: block; margin-top: 6px;"
+              >
                 {{ t.error }}
               </NText>
             </div>
-            <NSpace :size="8" @click.stop>
+            <NSpace
+              :size="8"
+              @click.stop
+            >
               <NButton
                 v-if="t.has_minutes"
                 size="small"
@@ -153,9 +212,11 @@ function removeTask(t: TaskListItem) {
                 size="small"
                 quaternary
                 type="error"
-                @click.stop="removeTask(t)"
                 title="删除"
-              >×</NButton>
+                @click.stop="removeTask(t)"
+              >
+                ×
+              </NButton>
             </NSpace>
           </div>
         </NCard>

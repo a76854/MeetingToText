@@ -49,77 +49,150 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 style="font-size: 24px; margin-bottom: 8px; text-align: center;">实时录音</h1>
+    <h1 style="font-size: 24px; margin-bottom: 8px; text-align: center;">
+      实时录音
+    </h1>
     <p style="color: #888; font-size: 14px; margin-bottom: 24px; text-align: center;">
       使用浏览器麦克风录制会议音频
     </p>
 
     <NCard>
-      <NSpace vertical :size="20" align="center" style="padding: 16px 0;">
-        <div v-if="state === 'idle'" style="text-align: center; color: #666; font-size: 15px;">
-          <div style="font-size: 40px; margin-bottom: 12px;">🎤</div>
+      <NSpace
+        vertical
+        :size="20"
+        align="center"
+        style="padding: 16px 0;"
+      >
+        <div
+          v-if="state === 'idle'"
+          style="text-align: center; color: #666; font-size: 15px;"
+        >
+          <div style="font-size: 40px; margin-bottom: 12px;">
+            🎤
+          </div>
           <div>点击下方按钮开始录音</div>
-          <div style="font-size: 12px; color: #aaa; margin-top: 8px;">录制完成后将自动生成转录</div>
+          <div style="font-size: 12px; color: #aaa; margin-top: 8px;">
+            录制完成后将自动生成转录
+          </div>
           <div style="margin-top: 16px;">
             <NSpace align="center">
-              <NSwitch :value="streamingAsrEnabled" @update:value="toggleStreamingAsr" />
+              <NSwitch
+                :value="streamingAsrEnabled"
+                @update:value="toggleStreamingAsr"
+              />
               <span style="font-size: 13px; color: #444;">实时转录</span>
             </NSpace>
           </div>
         </div>
 
-        <NSpin v-if="state === 'preparing'" :show="true" size="large" description="正在准备...">
-          <div style="min-height: 80px; min-width: 200px;"></div>
+        <NSpin
+          v-if="state === 'preparing'"
+          :show="true"
+          size="large"
+          description="正在准备..."
+        >
+          <div style="min-height: 80px; min-width: 200px;" />
         </NSpin>
 
-        <div v-if="state === 'cancelling'" style="text-align: center;">
+        <div
+          v-if="state === 'cancelling'"
+          style="text-align: center;"
+        >
           <NSpin :show="true" />
-          <div style="margin-top: 12px; color: #888;">已放弃本次录音</div>
+          <div style="margin-top: 12px; color: #888;">
+            已放弃本次录音
+          </div>
         </div>
 
-        <div v-if="state === 'done'" style="text-align: center; color: #137333;">
-          <div style="width: 40px; height: 40px; border-radius: 50%; background: #137333; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; margin: 0 auto 8px;">✓</div>
+        <div
+          v-if="state === 'done'"
+          style="text-align: center; color: #137333;"
+        >
+          <div style="width: 40px; height: 40px; border-radius: 50%; background: #137333; color: white; display: flex; align-items: center; justify-content: center; font-size: 20px; margin: 0 auto 8px;">
+            ✓
+          </div>
           <div>录制完成，正在跳转...</div>
         </div>
 
-        <div v-if="state === 'recording' || state === 'stopping'" class="recording-panel">
-          <div class="timer-main">{{ timer }}</div>
+        <div
+          v-if="state === 'recording' || state === 'stopping'"
+          class="recording-panel"
+        >
+          <div class="timer-main">
+            {{ timer }}
+          </div>
 
           <div class="volume-bars">
             <div
-              v-for="i in VOLUME_BARS" :key="i"
+              v-for="i in VOLUME_BARS"
+              :key="i"
               class="vol-bar"
               :class="{ active: volume > (i - 1) / VOLUME_BARS }"
               :style="{ height: Math.max(4, 8 + Math.sin(i * WAVE_PHASE_STEP) * 12 + volume * 18) + 'px' }"
-            ></div>
+            />
           </div>
 
           <div class="recording-indicator">
-            <span class="rec-dot" :class="{ stopping: state === 'stopping' }"></span>
+            <span
+              class="rec-dot"
+              :class="{ stopping: state === 'stopping' }"
+            />
             {{ state === 'stopping' ? '正在保存...' : '录制中' }}
           </div>
         </div>
 
-        <div v-if="(state === 'recording' || state === 'stopping') && streamingAsrEnabled" class="live-panel">
+        <div
+          v-if="(state === 'recording' || state === 'stopping') && streamingAsrEnabled"
+          class="live-panel"
+        >
           <div class="live-header">
-            <span class="live-dot" :class="liveStatus"></span>
+            <span
+              class="live-dot"
+              :class="liveStatus"
+            />
             <span class="live-title">实时转录</span>
-            <span v-if="liveStatus === 'waiting'" class="live-warn">加载模型中...</span>
+            <span
+              v-if="liveStatus === 'waiting'"
+              class="live-warn"
+            >加载模型中...</span>
           </div>
-          <div ref="liveContentEl" class="live-content" @scroll="onLiveScroll">
-            <p v-if="liveText" class="live-text">{{ liveText }}<span class="cursor">▍</span></p>
-            <p v-else-if="liveStatus === 'waiting'" class="live-empty">正在启动实时转录，请稍候...</p>
-            <p v-else class="live-empty">聆听中...</p>
+          <div
+            ref="liveContentEl"
+            class="live-content"
+            @scroll="onLiveScroll"
+          >
+            <p
+              v-if="liveText"
+              class="live-text"
+            >
+              {{ liveText }}<span class="cursor">▍</span>
+            </p>
+            <p
+              v-else-if="liveStatus === 'waiting'"
+              class="live-empty"
+            >
+              正在启动实时转录，请稍候...
+            </p>
+            <p
+              v-else
+              class="live-empty"
+            >
+              聆听中...
+            </p>
           </div>
         </div>
 
-        <NSpace v-if="state === 'idle'" justify="center" style="width: 100%;">
+        <NSpace
+          v-if="state === 'idle'"
+          justify="center"
+          style="width: 100%;"
+        >
           <NButton
             type="primary"
             size="large"
             round
-            @click="startRecording(router)"
             style="min-width: 200px; min-height: 54px; font-size: 15px;"
+            @click="startRecording(router)"
           >
             <template #icon>
               <span style="font-size: 14px;">●</span>
@@ -128,14 +201,18 @@ onMounted(async () => {
           </NButton>
         </NSpace>
 
-        <NSpace v-else-if="state !== 'done' && state !== 'cancelling'" justify="center" style="width: 100%;">
+        <NSpace
+          v-else-if="state !== 'done' && state !== 'cancelling'"
+          justify="center"
+          style="width: 100%;"
+        >
           <NButton
             v-if="state === 'recording'"
             type="error"
             size="large"
             round
-            @click="stopRecording(router)"
             style="min-width: 200px; min-height: 54px; font-size: 15px;"
+            @click="stopRecording(router)"
           >
             <template #icon>
               <span style="font-size: 14px;">■</span>
@@ -155,8 +232,8 @@ onMounted(async () => {
             size="large"
             round
             :disabled="state === 'stopping'"
-            @click="cancelRecording"
             style="min-width: 100px; min-height: 54px;"
+            @click="cancelRecording"
           >
             取消
           </NButton>
@@ -166,8 +243,8 @@ onMounted(async () => {
           v-if="error"
           type="error"
           :show-icon="false"
-          @click="error = ''"
           style="cursor: pointer; max-width: 100%;"
+          @click="error = ''"
         >
           {{ error }}
         </NAlert>
@@ -175,8 +252,8 @@ onMounted(async () => {
         <NAlert
           v-if="warning && state === 'recording'"
           type="warning"
-          @click="warning = ''"
           style="cursor: pointer; max-width: 100%;"
+          @click="warning = ''"
         >
           ⚠ {{ warning }}
         </NAlert>
@@ -184,13 +261,16 @@ onMounted(async () => {
         <NAlert
           v-if="liveError && (state === 'recording' || state === 'stopping')"
           type="warning"
-          @click="liveError = ''"
           style="cursor: pointer; max-width: 100%;"
+          @click="liveError = ''"
         >
           {{ liveError }}
         </NAlert>
 
-        <p v-if="state === 'idle'" style="font-size: 12px; color: #999; text-align: center; max-width: 360px;">
+        <p
+          v-if="state === 'idle'"
+          style="font-size: 12px; color: #999; text-align: center; max-width: 360px;"
+        >
           录音中可随时点「取消」放弃本次录制，不会保存到历史任务。
         </p>
       </NSpace>

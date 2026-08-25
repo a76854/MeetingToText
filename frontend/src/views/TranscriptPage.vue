@@ -189,18 +189,43 @@ function retryTranscribe() {
 
 <template>
   <div>
-    <NSpace align="center" justify="space-between" style="margin-bottom: 16px; flex-wrap: wrap;" :wrap-item="false">
-      <h1 style="font-size: 24px; margin: 0;">转录结果</h1>
-      <NSpace align="center" v-if="status === 'processing'">
-        <NTag type="warning" round>转写中...</NTag>
+    <NSpace
+      align="center"
+      justify="space-between"
+      style="margin-bottom: 16px; flex-wrap: wrap;"
+      :wrap-item="false"
+    >
+      <h1 style="font-size: 24px; margin: 0;">
+        转录结果
+      </h1>
+      <NSpace
+        v-if="status === 'processing'"
+        align="center"
+      >
+        <NTag
+          type="warning"
+          round
+        >
+          转写中...
+        </NTag>
       </NSpace>
     </NSpace>
 
-    <NCard v-if="status === 'done'" style="margin-bottom: 16px;">
-      <NSpace vertical :size="16">
+    <NCard
+      v-if="status === 'done'"
+      style="margin-bottom: 16px;"
+    >
+      <NSpace
+        vertical
+        :size="16"
+      >
         <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap; width: 100%;">
           <div style="display: flex; align-items: center; gap: 16px; flex: 1; min-width: 300px;">
-            <NButton @click="togglePlay" type="primary" ghost>
+            <NButton
+              type="primary"
+              ghost
+              @click="togglePlay"
+            >
               {{ playingId ? '暂停' : '播放' }}
             </NButton>
             <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 120px;">
@@ -222,44 +247,113 @@ function retryTranscribe() {
             </div>
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
-            <NButton @click="retryTranscribe" secondary>重转</NButton>
-            <NButton @click="goToEdit" secondary>编辑</NButton>
+            <NButton
+              secondary
+              @click="retryTranscribe"
+            >
+              重转
+            </NButton>
+            <NButton
+              secondary
+              @click="goToEdit"
+            >
+              编辑
+            </NButton>
           </div>
         </div>
         <NDivider style="margin: 0;" />
-        <NSpace align="center" justify="space-between" wrap>
+        <NSpace
+          align="center"
+          justify="space-between"
+          wrap
+        >
           <NSpace align="center">
             <span style="font-size: 13px; color: #888;">导出：</span>
-            <NButton size="small" @click="exportAs('txt')">TXT</NButton>
-            <NButton size="small" @click="exportAs('srt')">SRT 字幕</NButton>
-            <NButton size="small" @click="exportAs('md')">Markdown</NButton>
+            <NButton
+              size="small"
+              @click="exportAs('txt')"
+            >
+              TXT
+            </NButton>
+            <NButton
+              size="small"
+              @click="exportAs('srt')"
+            >
+              SRT 字幕
+            </NButton>
+            <NButton
+              size="small"
+              @click="exportAs('md')"
+            >
+              Markdown
+            </NButton>
           </NSpace>
           <NSpace>
-            <NButton @click="goToMinutes" ghost>查看纪要</NButton>
-            <NButton @click="goToGenerate" type="primary">生成纪要</NButton>
-            <NButton @click="deleteTask" type="error" ghost>删除任务</NButton>
+            <NButton
+              ghost
+              @click="goToMinutes"
+            >
+              查看纪要
+            </NButton>
+            <NButton
+              type="primary"
+              @click="goToGenerate"
+            >
+              生成纪要
+            </NButton>
+            <NButton
+              type="error"
+              ghost
+              @click="deleteTask"
+            >
+              删除任务
+            </NButton>
           </NSpace>
         </NSpace>
       </NSpace>
     </NCard>
 
-    <NAlert v-if="error" type="error" :title="error" style="margin-bottom: 16px;" />
+    <NAlert
+      v-if="error"
+      type="error"
+      :title="error"
+      style="margin-bottom: 16px;"
+    />
 
     <div v-if="status === 'processing' || status === 'pending'">
       <NCard>
-        <ProgressIndicator v-if="progress" :progress="progress" />
+        <ProgressIndicator
+          v-if="progress"
+          :progress="progress"
+        />
         <NSpin v-else>
-          <div style="text-align: center; padding: 24px;">正在处理转写，请稍候...</div>
+          <div style="text-align: center; padding: 24px;">
+            正在处理转写，请稍候...
+          </div>
         </NSpin>
       </NCard>
     </div>
 
-    <NCard v-else-if="status === 'error'" style="text-align: center;">
+    <NCard
+      v-else-if="status === 'error'"
+      style="text-align: center;"
+    >
       <NEmpty :description="pipelineError || '转写出错'">
         <template #extra>
           <NSpace>
-            <NButton @click="retryTranscribe" type="primary">重新转录</NButton>
-            <NButton @click="deleteTask" type="error" ghost>删除任务</NButton>
+            <NButton
+              type="primary"
+              @click="retryTranscribe"
+            >
+              重新转录
+            </NButton>
+            <NButton
+              type="error"
+              ghost
+              @click="deleteTask"
+            >
+              删除任务
+            </NButton>
           </NSpace>
         </template>
       </NEmpty>
@@ -268,26 +362,42 @@ function retryTranscribe() {
     <template v-else-if="status === 'done'">
       <NCard>
         <template v-if="segments.length">
-          <NSpace vertical :size="10">
+          <NSpace
+            vertical
+            :size="10"
+          >
             <NCard
               v-for="(seg, i) in segments"
               :key="i"
               size="small"
               hoverable
             >
-              <NSpace align="center" justify="space-between" style="margin-bottom: 6px;">
-                <NTag :type="seg.speaker ? 'info' : 'default'" size="small" round>
+              <NSpace
+                align="center"
+                justify="space-between"
+                style="margin-bottom: 6px;"
+              >
+                <NTag
+                  :type="seg.speaker ? 'info' : 'default'"
+                  size="small"
+                  round
+                >
                   {{ seg.speaker || '未知说话人' }}
                 </NTag>
                 <span style="font-size: 12px; color: #aaa; font-variant-numeric: tabular-nums;">
                   {{ formatDuration(seg.start) }} - {{ formatDuration(seg.end) }}
                 </span>
               </NSpace>
-              <div style="font-size: 15px; line-height: 1.6;">{{ seg.text }}</div>
+              <div style="font-size: 15px; line-height: 1.6;">
+                {{ seg.text }}
+              </div>
             </NCard>
           </NSpace>
         </template>
-        <pre v-else-if="fullText" style="white-space: pre-wrap; font-family: inherit; font-size: 15px; line-height: 1.8; margin: 0;">{{ fullText }}</pre>
+        <pre
+          v-else-if="fullText"
+          style="white-space: pre-wrap; font-family: inherit; font-size: 15px; line-height: 1.8; margin: 0;"
+        >{{ fullText }}</pre>
         <NEmpty
           v-else
           :description="pipelineError || '转录完成，但未能识别到语音内容。请检查麦克风是否正常工作后重新录制。'"
@@ -296,7 +406,11 @@ function retryTranscribe() {
 
 
 
-      <audio ref="audioPlayer" :src="api.audioUrl(taskId)" style="display: none;"></audio>
+      <audio
+        ref="audioPlayer"
+        :src="api.audioUrl(taskId)"
+        style="display: none;"
+      />
     </template>
   </div>
 </template>

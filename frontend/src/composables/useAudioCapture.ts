@@ -154,7 +154,7 @@ export function useAudioCapture(): AudioCapture {
           ctx.createMediaStreamSource(sysStream).connect(dest)
           mergeCtx = ctx
           mediaStream = dest.stream
-        } catch (sysErr) {
+        } catch {
           mediaStream = micStream
           warning = '系统音频不可用，已切换为仅录制麦克风'
         }

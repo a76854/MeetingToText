@@ -42,7 +42,10 @@ const percent = computed(() => {
       :height="10"
       style="margin-bottom: 20px;"
     />
-    <NSteps :current="stepItems.findIndex(s => s.status === 'process') + 1" vertical>
+    <NSteps
+      :current="stepItems.findIndex(s => s.status === 'process') + 1"
+      vertical
+    >
       <NStep
         v-for="(item, i) in stepItems"
         :key="i"
