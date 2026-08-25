@@ -2,13 +2,16 @@ import asyncio
 import json
 import os
 
-from fastapi import APIRouter, HTTPException
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Path
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
+from backend.app.models.schemas import TaskInfo, TaskStatus, TranscriptSegment
+from backend.app.routers.deps import ensure_task_or_404
 from backend.app.services.pipeline import format_transcript_text, submit_pipeline
 from backend.app.services.store import get_store, get_task
-from backend.app.models.schemas import TaskStatus, TranscriptSegment
 
 router = APIRouter(prefix="/api", tags=["transcribe"])
 
@@ -17,11 +20,17 @@ class TranscriptUpdate(BaseModel):
     segments: list[TranscriptSegment]
 
 
+def _task_or_404(task_id: str = Path(..., description="任务 ID")) -> TaskInfo:
+    return ensure_task_or_404(get_task(task_id))
+
+
+# 晚绑定适配：本模块的测试把假 get_task 补丁打在本命名空间（见 deps.py 说明），
+# 所以这里先经本模块的 get_task 查询，404 判定仍复用 deps 的 ensure_task_or_404。
+TaskDep = Annotated[TaskInfo, Depends(_task_or_404)]
+
+
 @router.post("/transcribe/{task_id}")
-async def start_transcribe(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def start_transcribe(task_id: str, task: TaskDep):
     if task.status == TaskStatus.processing:
         raise HTTPException(status_code=400, detail="任务正在转录中")
     submit_pipeline(task_id)
@@ -29,10 +38,7 @@ async def start_transcribe(task_id: str):
 
 
 @router.post("/transcribe/{task_id}/retry")
-async def retry_transcribe(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def retry_transcribe(task_id: str, task: TaskDep):
     if not task.audio_path or not os.path.exists(task.audio_path):
         raise HTTPException(status_code=400, detail="音频文件不存在，无法重新转录")
     if task.status == TaskStatus.processing:
@@ -81,10 +87,7 @@ async def stream_progress(task_id: str):
 
 
 @router.get("/transcript/{task_id}")
-async def get_transcript(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def get_transcript(task: TaskDep):
     return {
         "task_id": task.id,
         "status": task.status.value,
@@ -96,10 +99,7 @@ async def get_transcript(task_id: str):
 
 
 @router.put("/transcript/{task_id}")
-async def update_transcript(task_id: str, body: TranscriptUpdate):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def update_transcript(task_id: str, body: TranscriptUpdate, task: TaskDep):
     if task.status != TaskStatus.done:
         raise HTTPException(status_code=400, detail="只有已完成的任务才能编辑")
 

@@ -5,8 +5,9 @@ from pydantic import BaseModel
 
 from backend.app.config import settings
 from backend.app.models.schemas import GenerateRequest, GenerateResponse
+from backend.app.routers.deps import TaskDep, get_task_or_404
 from backend.app.services.llm import get_llm
-from backend.app.services.store import get_store, get_task
+from backend.app.services.store import get_store
 from backend.app.templates.presets import get_template, get_templates
 from backend.app.templates.prompts import build_minutes_messages
 
@@ -24,9 +25,7 @@ async def list_templates():
 
 @router.post("/generate", response_model=GenerateResponse)
 async def generate_minutes(req: GenerateRequest):
-    task = get_task(req.task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = get_task_or_404(req.task_id)
     if task.result is None or not task.result.full_text:
         raise HTTPException(status_code=400, detail="No transcript available")
 
@@ -61,9 +60,6 @@ async def generate_minutes(req: GenerateRequest):
 
 
 @router.put("/minutes/{task_id}", response_model=GenerateResponse)
-async def update_minutes(task_id: str, body: UpdateMinutesRequest):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def update_minutes(task_id: str, body: UpdateMinutesRequest, task: TaskDep):
     get_store().save_minutes(task_id, body.minutes)
     return GenerateResponse(minutes=body.minutes)

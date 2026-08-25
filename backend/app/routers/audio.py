@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from backend.app.services.store import get_task
+from backend.app.routers.deps import TaskDep
 
 router = APIRouter(prefix="/api", tags=["audio"])
 
@@ -22,10 +22,7 @@ _AUDIO_MIME = {
 
 
 @router.get("/audio/{task_id}")
-async def get_audio(task_id: str):
-    task = get_task(task_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+async def get_audio(task: TaskDep):
     if not task.audio_path or not os.path.exists(task.audio_path):
         raise HTTPException(status_code=404, detail="音频文件不存在")
     ext = os.path.splitext(task.audio_path)[1].lower()
