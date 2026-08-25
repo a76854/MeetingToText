@@ -1,0 +1,19 @@
+# MeetingToText .dockerignore — repo-root context
+#
+# Build context is repo root (..) because both Dockerfiles use selective COPY
+# (pyproject.toml + backend/, frontend/package.json + src/, etc.). This file
+# is belt-and-braces to keep the context upload small — it does NOT break
+# image builds because no Dockerfile depends on the excluded paths.
+# Excluding data/models alone saves ~GBs; node_modules/dist saves 100s of MB.
+.git/
+.omo/
+data/
+.idea/
+.vscode/
+*.log
+frontend/node_modules/
+frontend/dist/
+tests/
+node_modules/
+.pytest_cache/
+**/__pycache__/

@@ -1,0 +1,55 @@
+# MeetingToText — compose orchestration (two-container deployment)
+#
+# First-boot note:
+#   Backend healthcheck start_period is 300s because the first boot may need
+#   to download FunASR models (SenseVoice + CAM++ ~1-2 GB) into the persistent
+#   volume ../data/models (MODELSCOPE_CACHE=/data/models). During that window
+#   /api/health will flap until models are cached; the long start_period avoids
+#   marking the container unhealthy while the download progresses steadily.
+#
+# Data persistence:
+#   Single host volume ../data is mounted at /data inside the backend container
+#   (MTT_DATA_DIR=/data). It holds meetingtotext.db, uploads, temp, logs and
+#   the models cache. Mounting the REAL ../data means a legacy host database
+#   (if present) is reused — that is intentional; no data is deleted by compose
+#   operations. The volume survives `docker compose down`.
+#
+# Networking / port exposure (Metis guard):
+#   Backend exposes 8000 only internally to nginx via `expose` (no `ports`
+#   mapping). Clients never reach http://localhost:8000 directly — all API
+#   traffic goes through nginx at http://localhost (/api/ → proxy_pass
+#   http://backend:8000). This preserves same-origin (CORS not needed in prod)
+#   and keeps the backend surface private. Frontend publishes 80:80.
+#
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.backend
+    volumes:
+      - "../data:/data"
+    environment:
+      MTT_DATA_DIR: /data
+      MODELSCOPE_CACHE: /data/models
+    healthcheck:
+      # python:3.12-slim has no curl/wget — use stdlib urlopen against readiness probe.
+      # Probes DB SELECT 1 + disk threshold (MTT_HEALTH_MIN_DISK_MB) — not model preload.
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 10
+      start_period: 300s
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.frontend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
