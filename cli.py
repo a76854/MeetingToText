@@ -1,7 +1,6 @@
 """CLI entrypoint for MeetingToText.
 
-``meetingtotext`` / ``python main.py`` default to ``serve`` when no subcommand
-is given, preserving the historical ``python main.py`` behaviour.
+``meetingtotext`` defaults to ``serve`` when no subcommand is given.
 
 ``--daemon`` / ``--stop`` are POSIX-only (fork + setsid + pidfile).
 The ``serve`` subcommand itself stays cross-platform.

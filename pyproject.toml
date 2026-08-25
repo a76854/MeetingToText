@@ -32,7 +32,10 @@ dev = [
 ]
 
 [project.scripts]
-meetingtotext = "backend.app.cli:main"
+meetingtotext = "cli:main"
+
+[tool.setuptools]
+py-modules = ["cli"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

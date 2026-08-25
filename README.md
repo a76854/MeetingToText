@@ -36,7 +36,7 @@ cd frontend && npm install && cd ..
 
 ```bash
 cd frontend && npm run build && cd ..
-python main.py
+meetingtotext serve
 # 访问 http://localhost:8000
 ```
 
@@ -46,7 +46,7 @@ python main.py
 
 ```bash
 # 终端 1 - 后端
-python main.py
+meetingtotext serve --reload
 
 # 终端 2 - 前端
 cd frontend && npm run dev

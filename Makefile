@@ -19,18 +19,6 @@
 install: ## Install backend (editable, dev extras) and frontend deps
 	pip install -e ".[dev]" && cd frontend && npm ci
 
-run: ## Run the API server (foreground)
-	meetingtotext serve
-
-run-reload: ## Run the API server with auto-reload
-	meetingtotext serve --reload
-
-daemon: ## Start the API server as a background daemon
-	meetingtotext serve --daemon
-
-stop: ## Stop the running daemon
-	meetingtotext serve --stop
-
 logs: ## Tail the daemon log file
 	tail -n 100 -f data/logs/meetingtotext.log
 
@@ -61,4 +49,4 @@ docker-down: ## Stop the Docker stack
 help: ## List available targets
 	@awk '/^[a-zA-Z_-]+:/{ if ($$2 == "##") { name=$$1; sub(/:$$/, "", name); desc=substr($$0, index($$0, "##")+3); printf "  %-14s %s\n", name, desc } }' $(MAKEFILE_LIST)
 
-.PHONY: install run run-reload daemon stop logs test test-system lint typecheck format build docker-up docker-down help
+.PHONY: install logs test test-system lint typecheck format build docker-up docker-down help

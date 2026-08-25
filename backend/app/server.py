@@ -7,8 +7,7 @@ No business logic lives here. Responsibilities:
 - register CORS middleware;
 - include every router (upload, record, transcribe, generate, settings,
   export, audio, health);
-- serve the built SPA from `frontend/dist` with an index.html fallback;
-- expose `main()` as the uvicorn entrypoint.
+- serve the built SPA from `frontend/dist` with an index.html fallback.
 """
 
 import logging
@@ -131,8 +130,8 @@ def serve(
 ) -> None:
     """Run uvicorn for the assembled app.
 
-    Parameters are wired from :mod:`backend.app.cli` so that ``meetingtotext``
-    / ``python main.py`` share a single code path. ``log_file`` is accepted
+    Parameters are wired from :mod:`cli` so that ``meetingtotext``
+    share a single code path. ``log_file`` is accepted
     for forward-compatibility (todo-8 wires a dictConfig); today it is unused
     beyond being part of the stable signature.
     """
@@ -157,13 +156,4 @@ def serve(
     uvicorn.run("backend.app.server:app", **run_kwargs)
 
 
-def main() -> None:
-    """Thin alias — real entrypoint is :mod:`backend.app.cli`."""
 
-    from backend.app.cli import main as cli_main
-
-    cli_main()
-
-
-if __name__ == "__main__":
-    main()
