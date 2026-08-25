@@ -17,7 +17,7 @@ export default tseslint.config(
       parser: parserVue,
       parserOptions: {
         parser: tseslint.parser,
-        projectService: { allowDefaultProject: ['vite.config.ts'] },
+        projectService: { allowDefaultProject: ['vite.config.ts', 'vitest.config.ts'] },
         extraFileExtensions: ['.vue'],
       },
     },
@@ -25,7 +25,7 @@ export default tseslint.config(
   {
     languageOptions: {
       parserOptions: {
-        projectService: { allowDefaultProject: ['vite.config.ts'] },
+        projectService: { allowDefaultProject: ['vite.config.ts', 'vitest.config.ts'] },
       },
       globals: {
         ...globals.browser,

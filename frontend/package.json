@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "test": "vitest run"
   },
   "dependencies": {
     "dompurify": "^3.4.14",
@@ -21,13 +22,16 @@
   "devDependencies": {
     "@eslint/js": "^9.20.0",
     "@vitejs/plugin-vue": "^5.2.0",
+    "@vue/test-utils": "^2.4.11",
     "eslint": "^9.20.0",
     "eslint-plugin-vue": "^10.0.0",
     "globals": "^16.0.0",
+    "jsdom": "^29.1.1",
     "prettier": "^3.5.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.24.0",
     "vite": "^6.0.0",
+    "vitest": "^4.1.11",
     "vue-eslint-parser": "^10.0.0",
     "vue-tsc": "^2.2.0"
   }
