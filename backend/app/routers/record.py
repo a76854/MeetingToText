@@ -294,8 +294,8 @@ async def discard_record_session(task_id: str):
     """Discard a suspended (or active) recording: delete file, create no task."""
     record_session_service.cancel_grace_timer(task_id)
     if not recorder_manager.has_session(task_id):
-        raise HTTPException(status_code=404, detail="no recording session")
+        raise HTTPException(status_code=404, detail="录音会话不存在或已结束")
     ok = await recorder_manager.discard_recording(task_id)
     if not ok:
-        raise HTTPException(status_code=404, detail="no recording session")
+        raise HTTPException(status_code=404, detail="录音会话不存在或已结束")
     return {"status": "ok"}

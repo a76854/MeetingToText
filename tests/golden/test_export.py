@@ -1,18 +1,18 @@
 """Golden tests locking the TXT / SRT / MD export output formats.
 
 These tests snapshot the CURRENT byte-for-byte output of the real exporters in
-``backend/app/routers/export.py`` (imported directly — logic is NOT duplicated
-here). They exist to catch silent format changes during later de-duplication
-refactors of the text-building logic (e.g. pipeline.py:213-217 and
-transcribe.py:106-111 build ``full_text`` with a ``"\\n\\n"`` separator, while
-``_export_txt`` joins segments with a single ``"\\n"``).
+``backend/app/services/exporters.py`` (imported directly — logic is NOT
+duplicated here). They exist to catch silent format changes during later
+de-duplication refactors of the text-building logic (e.g. pipeline.py:213-217
+and transcribe.py:106-111 build ``full_text`` with a ``"\\n\\n"`` separator,
+while ``_export_txt`` joins segments with a single ``"\\n"``).
 
 If one of these tests fails after a refactor, the export format changed for
 end users — that must be an explicit, reviewed decision (update the golden
 strings in the same commit), never an accident.
 
 Hermetic: no ASR model load, no DB, no network. The import chain of
-``backend.app.routers.export`` only defines functions at module level.
+``backend.app.services.exporters`` only defines functions at module level.
 """
 
 from backend.app.models.schemas import TaskInfo, TaskResult, TaskStatus, TranscriptSegment
