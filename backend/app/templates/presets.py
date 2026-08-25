@@ -62,7 +62,13 @@ TEMPLATES = {
 
 def get_templates() -> list[dict]:
     return [
-        {"id": t["id"], "name": t["name"], "description": t["description"]}
+        {
+            "id": t["id"],
+            "name": t["name"],
+            "description": t["description"],
+            "system_prompt": t.get("system_prompt", ""),
+            "output_format": t.get("output_format", ""),
+        }
         for t in TEMPLATES.values()
     ]
 

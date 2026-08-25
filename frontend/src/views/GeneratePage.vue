@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MarkdownView from '../components/MarkdownView.vue'
 import {
@@ -27,6 +27,10 @@ const customInstructions = ref('')
 const generating = ref(false)
 const minutes = ref('')
 const error = ref('')
+
+const selectedTemplateDetail = computed(() => {
+  return templates.value.find((t) => t.id === selectedTemplate.value) || null
+})
 
 onMounted(async () => {
   try {
@@ -129,6 +133,27 @@ function downloadMarkdown() {
           </NRadio>
         </NSpace>
       </NRadioGroup>
+    </NCard>
+
+    <NCard
+      v-if="selectedTemplateDetail"
+      title="模板预览"
+      style="margin-bottom: 16px;"
+    >
+      <div style="margin-bottom: 12px;">
+        <div style="font-size: 12px; color: #888; margin-bottom: 4px;">
+          规则 / 要求
+        </div>
+        <div style="font-size: 13px; line-height: 1.6; white-space: pre-wrap;">
+          {{ selectedTemplateDetail.system_prompt }}
+        </div>
+      </div>
+      <div>
+        <div style="font-size: 12px; color: #888; margin-bottom: 4px;">
+          输出格式
+        </div>
+        <pre style="font-size: 13px; line-height: 1.6; background: #f5f5f5; padding: 12px; border-radius: 6px; overflow-x: auto; margin: 0; font-family: inherit; white-space: pre-wrap;">{{ selectedTemplateDetail.output_format }}</pre>
+      </div>
     </NCard>
 
     <NCard

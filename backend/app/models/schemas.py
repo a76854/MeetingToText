@@ -60,6 +60,8 @@ class TemplateInfo(BaseModel):
     id: str
     name: str
     description: str
+    system_prompt: str = ""
+    output_format: str = ""
 
 
 class GenerateRequest(BaseModel):
