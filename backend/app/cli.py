@@ -145,10 +145,32 @@ def _run_daemon(args: argparse.Namespace) -> None:
     log_dir = os.path.dirname(log_file_path) or "."
     with contextlib.suppress(Exception):
         os.makedirs(log_dir, exist_ok=True)
+    # Build central logging config: rotating file handler is the single writer,
+    # console disabled to avoid duplication via fd-redirected stderr.
+    from backend.app.logging_config import build_log_config
+
+    daemon_log_config = build_log_config(
+        args.log_level, log_file_path, console=False, pid=os.getpid()
+    )
+    # Resolve actual file the handler will write (pid-suffixed) and also
+    # redirect stdio there so non-logging output lands alongside logs.
+    # The handlers dict always contains "rotating_file" when log_file is set.
     try:
-        log_fd = os.open(log_file_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        _handlers = daemon_log_config.get("handlers", {})
+        assert isinstance(_handlers, dict)
+        _rf = _handlers.get("rotating_file")
+        assert isinstance(_rf, dict)
+        _handler_file = str(_rf.get("filename", log_file_path))
+    except Exception:
+        _handler_file = log_file_path
+    # Ensure handler file's directory exists (build_log_config already tries,
+    # but we handle pid case explicitly).
+    with contextlib.suppress(Exception):
+        os.makedirs(os.path.dirname(_handler_file) or ".", exist_ok=True)
+    try:
+        log_fd = os.open(_handler_file, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
     except OSError as exc:
-        print(f"cannot open log file {log_file_path}: {exc}", file=sys.stderr)
+        print(f"cannot open log file {_handler_file}: {exc}", file=sys.stderr)
         os._exit(1)
     try:
         devnull_fd = os.open(os.devnull, os.O_RDWR)
@@ -166,7 +188,7 @@ def _run_daemon(args: argparse.Namespace) -> None:
         with contextlib.suppress(Exception):
             sys.stdin = open(os.devnull)  # noqa: SIM115  # daemon keeps fd open for process lifetime
         with contextlib.suppress(Exception):
-            lf = open(log_file_path, "a", buffering=1)  # noqa: SIM115  # daemon keeps fd open for process lifetime
+            lf = open(_handler_file, "a", buffering=1)  # noqa: SIM115  # daemon keeps fd open for process lifetime
             sys.stdout = lf
             sys.stderr = lf
     except OSError:
@@ -189,13 +211,14 @@ def _run_daemon(args: argparse.Namespace) -> None:
             workers=1,
             reload=False,
             log_level=args.log_level,
-            log_file=log_file_path,
+            log_file=_handler_file,
+            log_config=daemon_log_config,
         )
     except BaseException:
         try:
             import traceback
 
-            with open(log_file_path, "a") as fh:
+            with open(_handler_file, "a") as fh:
                 traceback.print_exc(file=fh)
         except Exception:
             pass
@@ -257,8 +280,10 @@ def main(argv: list[str] | None = None) -> None:
     if getattr(args, "stop", False):
         _run_stop(args)
         return
+    from backend.app.logging_config import build_log_config
     from backend.app.server import serve
 
+    cfg = build_log_config(args.log_level, args.log_file)
     serve(
         host=args.host,
         port=args.port,
@@ -266,6 +291,7 @@ def main(argv: list[str] | None = None) -> None:
         reload=args.reload,
         log_level=args.log_level,
         log_file=args.log_file,
+        log_config=cfg,
     )
 
 
