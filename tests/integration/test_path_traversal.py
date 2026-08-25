@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.server import app
 
-pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+pytestmark = [pytest.mark.integration, pytest.mark.filterwarnings("ignore::DeprecationWarning")]
 
 TRAVERSAL_PATHS = [
     "/%2e%2e/%2e%2e/backend/app/config.py",

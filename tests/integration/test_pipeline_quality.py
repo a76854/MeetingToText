@@ -29,6 +29,8 @@ import os
 
 import numpy as np
 import pytest
+
+pytestmark = pytest.mark.integration
 import soundfile as sf
 
 from backend.app import config

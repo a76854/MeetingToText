@@ -3,12 +3,12 @@ from pathlib import Path
 
 import pytest
 
-# Non-hermetic: downloads FunASR models; skip by default, run via `pytest -m smoke`.
-pytestmark = pytest.mark.smoke
+# Non-hermetic: downloads FunASR models; skip by default, run via `pytest -m system`.
+pytestmark = pytest.mark.system
 
 
 def _list_recordings():
-    upload_dir = Path(__file__).resolve().parent.parent / "data" / "uploads"
+    upload_dir = Path(__file__).resolve().parent.parent.parent / "data" / "uploads"
     return sorted(upload_dir.glob("*.wav"), key=os.path.getmtime, reverse=True)
 
 

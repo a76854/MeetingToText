@@ -15,6 +15,8 @@ any, live in this file only.
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from backend.app.templates.presets import TEMPLATES, get_template
 from backend.app.templates.prompts import build_minutes_messages
 

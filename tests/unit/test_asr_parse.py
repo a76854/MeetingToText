@@ -9,6 +9,10 @@ Hermetic by construction: ``asr_parse`` imports only ``logging`` and
 ``re``, and this file imports nothing from funasr / modelscope / torch.
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from backend.app.services.asr_parse import (
     MS_PER_S,
     SPEAKER_LABEL_TEMPLATE,

@@ -58,6 +58,8 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+
+pytestmark = pytest.mark.integration
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

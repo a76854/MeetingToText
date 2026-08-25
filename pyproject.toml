@@ -37,8 +37,11 @@ meetingtotext = "backend.app.server:main"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+addopts = "-m 'not system'"
 markers = [
-    "smoke: non-hermetic end-to-end tests that download real FunASR models and use data/uploads recordings (deselect by default; run with -m smoke)",
+    "unit: pure-function hermetic tests with no I/O or external dependencies",
+    "integration: TestClient and multi-module tests with real SQLite and fakes for external services",
+    "system: tests that execute real FunASR models (deselect by default; run with -o addopts=\"\" -m system)",
 ]
 
 [tool.ruff]

@@ -33,6 +33,8 @@ import numpy as np
 import librosa
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from backend.app.services import asr_streaming
 from backend.app.services.asr_streaming import StreamingASRSession
 

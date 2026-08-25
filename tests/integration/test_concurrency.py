@@ -1,3 +1,7 @@
+import pytest
+
+pytestmark = pytest.mark.integration
+
 import threading
 
 import backend.app.services.store as store_mod

@@ -26,6 +26,8 @@ shapes) must preserve them byte-for-byte.
 import os
 
 import pytest
+
+pytestmark = pytest.mark.integration
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

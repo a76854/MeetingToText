@@ -18,6 +18,8 @@ client) leaks into other suites.
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
 from backend.app.config import settings
 from backend.app.services import llm
 

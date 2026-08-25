@@ -15,6 +15,10 @@ Hermetic: no ASR model load, no DB, no network. The import chain of
 ``backend.app.services.exporters`` only defines functions at module level.
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from backend.app.models.schemas import TaskInfo, TaskResult, TaskStatus, TranscriptSegment
 from backend.app.services.exporters import (
     _export_md,

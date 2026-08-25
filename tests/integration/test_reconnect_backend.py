@@ -14,6 +14,8 @@ import asyncio
 from types import SimpleNamespace
 
 import pytest
+
+pytestmark = pytest.mark.integration
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

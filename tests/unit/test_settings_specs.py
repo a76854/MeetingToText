@@ -11,6 +11,10 @@ with the legacy tables reconstructed inline as literals:
 - (c) sensitive flags mark secrets (llm_api_key).
 """
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
 from backend.app.config import SETTING_SPECS, Settings
 
 # Former startup._USER_SETTING_KEYS (key -> caster).
