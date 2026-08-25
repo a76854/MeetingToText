@@ -15,8 +15,10 @@
 import { test, expect, type Page } from '@playwright/test'
 import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const REPO_ROOT = path.resolve(__file, '..', '..', '..')
+const __filename = fileURLToPath(import.meta.url)
+const REPO_ROOT = path.resolve(__filename, '..', '..', '..')
 const BACKEND_PORT = 8000
 const BACKEND_URL = `http://127.0.0.1:${BACKEND_PORT}`
 const BACKEND_CMD = process.env.MTT_BACKEND_CMD ?? 'python'

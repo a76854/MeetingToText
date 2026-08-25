@@ -1,11 +1,13 @@
 // Playwright config for the reconnect-resume E2E scenario (see RUNME.md).
 import { defineConfig } from '@playwright/test'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
-const REPO_ROOT = path.resolve(__file, '..', '..', '..')
+const __filename = fileURLToPath(import.meta.url)
+const REPO_ROOT = path.resolve(__filename, '..', '..', '..')
 
 export default defineConfig({
-  testDir: path.dirname(__file),
+  testDir: path.dirname(__filename),
   timeout: 240_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,

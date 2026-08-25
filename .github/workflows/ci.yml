@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        run: pip install -e ".[dev]"
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Type check (mypy)
+        run: mypy backend/app
+      - name: Tests (unit + integration)
+        run: python -m pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Lint (eslint)
+        run: npx eslint .
+      - name: Build
+        run: npm run build
+      - name: Tests (vitest)
+        run: npm test
+
+  system:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # Cache ModelScope models directory to avoid re-downloading
+      # multi-GB FunASR models on every manual system run (real-model
+      # download cost is high; cache keyed on a marker file hash so
+      # model updates invalidate the cache).
+      - name: Cache ModelScope models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/modelscope
+          key: modelscope-${{ hashFiles('**/modelscope-marker') }}
+          restore-keys: |
+            modelscope-
+      - name: Install backend dependencies
+        run: pip install -e ".[dev]"
+      - name: System tests (real FunASR models)
+        run: python -m pytest -o addopts="" -m system -q
