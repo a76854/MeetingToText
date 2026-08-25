@@ -92,6 +92,27 @@ def coerce_bool(value: Any) -> bool:
     return str(value).lower() == "true"
 
 
+def cors_origins_from_env() -> list[str]:
+    """Parse ``MTT_CORS_ORIGINS`` into an allowlist.
+
+    Same-origin deployments (nginx reverse-proxy) don't need CORS at all —
+    the browser never sends a cross-origin request when frontend and backend
+    share one origin.  This list exists for dev cross-origin (vite on
+    ``:5173`` proxying to the API on ``:8000``) and explicit multi-origin
+    setups.  Configure via ``MTT_CORS_ORIGINS`` as a comma-separated list.
+
+    Returns:
+        Stripped, non-empty origins.  Defaults to
+        ``["http://localhost:5173", "http://localhost:8000"]`` when the env
+        var is unset or blank.
+    """
+    raw = os.getenv("MTT_CORS_ORIGINS", "")
+    if raw.strip() == "":
+        return ["http://localhost:5173", "http://localhost:8000"]
+    parts = [p.strip() for p in raw.split(",")]
+    return [p for p in parts if p]
+
+
 @dataclass(frozen=True)
 class SettingSpec:
     """Single source of truth for one user setting key (Q3(a)).

@@ -27,7 +27,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.app import startup
-from backend.app.config import settings
+from backend.app.config import cors_origins_from_env, settings
 from backend.app.routers import audio, export, generate, record, transcribe, upload
 from backend.app.routers import settings as settings_router
 from backend.app.routers.health import router as health_router
@@ -67,7 +67,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins_from_env(),
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -88,3 +88,4 @@ cd frontend && npm run dev
 | `MTT_LOG_FILE` | 空（仅控制台） | 日志文件路径，非空时写入磁盘 |
 | `MTT_HEALTH_MIN_DISK_MB` | `100` | 健康探针磁盘可用空间阈值（MB），低于返回 503 |
 | `MTT_RATE_LIMIT_RPM` | `60` | 进程内固定窗口限流（60s 窗口，每 IP 每分钟请求数）；仅 --workers 1 时精确 |
+| `MTT_CORS_ORIGINS` | `http://localhost:5173,http://localhost:8000` | 允许的跨源列表（逗号分隔）；同源部署无需配置 |
