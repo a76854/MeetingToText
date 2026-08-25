@@ -67,12 +67,103 @@ def _add_serve_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--stop", action="store_true", default=False, help="Stop daemon via pidfile")
 
 
+def _cmd_transcribe(args: argparse.Namespace) -> None:
+    """Transcribe one or more audio files without starting the server."""
+    # Lazy imports so `cli --help` stays fast and avoids heavy deps when not needed.
+    from backend.app.models.schemas import TaskStatus
+    from backend.app.routers.upload import ALLOWED_EXTENSIONS
+    from backend.app.services.exporters import _EXPORTERS
+    from backend.app.services.pipeline import run_pipeline
+    from backend.app.services.store import create_task, get_task
+
+    audio_files: list[str] = list(getattr(args, "audio", []) or [])
+    fmt: str = getattr(args, "format", "txt") or "txt"
+    out: str | None = getattr(args, "out", None)
+
+    if out is not None and len(audio_files) > 1:
+        build_parser().error("--out only valid with a single input file")
+
+    for inp in audio_files:
+        # Validate exists and not a directory
+        if not os.path.exists(inp) or os.path.isdir(inp):
+            print(f"错误: 文件不存在或为目录: {inp}", file=sys.stderr)
+            sys.exit(1)
+        ext = os.path.splitext(inp)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            print(
+                f"错误: 不支持的文件格式: {inp} (支持: {', '.join(sorted(ALLOWED_EXTENSIONS))})",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        # Resolve output path and effective format
+        if out is not None:
+            out_ext = os.path.splitext(out)[1].lower().lstrip(".")
+            if out_ext in ("txt", "srt", "md"):
+                effective_fmt = out_ext
+            else:
+                effective_fmt = out_ext if out_ext else fmt
+                # Restrict to known exporters; fallback to --format if unknown
+                if effective_fmt not in _EXPORTERS:
+                    effective_fmt = fmt
+            output_path = out
+        else:
+            effective_fmt = fmt
+            base = os.path.splitext(inp)[0]
+            output_path = f"{base}.{effective_fmt}"
+
+        if effective_fmt not in _EXPORTERS:
+            print(f"错误: 不支持的格式: {effective_fmt}", file=sys.stderr)
+            sys.exit(1)
+
+        # Create task and run pipeline synchronously (reuses DB task row — see commit body)
+        filename = os.path.basename(inp)
+        abs_path = os.path.abspath(inp)
+        task = create_task(filename=filename, audio_path=abs_path)
+        run_pipeline(task.id)
+
+        fresh = get_task(task.id)
+        if fresh is None or fresh.status != TaskStatus.done or fresh.result is None:
+            err_msg = ""
+            if fresh is not None and fresh.error:
+                err_msg = fresh.error
+            if not err_msg:
+                err_msg = "转录失败，未产生结果，请检查音频是否有效"
+            print(f"错误: {err_msg}", file=sys.stderr)
+            sys.exit(1)
+        # Empty-result guard (pipeline may return done but with no segments)
+        if not fresh.result.segments and not fresh.result.full_text.strip():
+            print("错误: 未能识别到语音内容，请检查音频是否有效", file=sys.stderr)
+            sys.exit(1)
+
+        _mime, exporter, _tpl = _EXPORTERS[effective_fmt]
+        content = exporter(fresh)
+
+        # Ensure parent directory exists
+        parent = os.path.dirname(os.path.abspath(output_path))
+        if parent and not os.path.exists(parent):
+            with contextlib.suppress(Exception):
+                os.makedirs(parent, exist_ok=True)
+        try:
+            with open(output_path, "w", encoding="utf-8") as f:
+                f.write(content)
+        except OSError as exc:
+            print(f"错误: 无法写入输出文件 {output_path}: {exc}", file=sys.stderr)
+            sys.exit(1)
+
+        print(f"转录完成 → {output_path}")
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="meetingtotext", description="MeetingToText — serve mode by default; use 'serve' subcommand for options.")  # noqa: E501
     _add_serve_args(parser)
     subparsers = parser.add_subparsers(dest="command")
     serve_parser = subparsers.add_parser("serve", help="Run the API server (default)")
     _add_serve_args(serve_parser)
+    transcribe_parser = subparsers.add_parser("transcribe", help="Transcribe audio file(s) without starting the server")  # noqa: E501
+    transcribe_parser.add_argument("audio", nargs="+", help="Input audio file(s)")
+    transcribe_parser.add_argument("--format", choices=["txt", "srt", "md"], default="txt", help="Output format (default: txt)")  # noqa: E501
+    transcribe_parser.add_argument("--out", dest="out", default=None, help="Output file path (only with single input)")  # noqa: E501
     return parser
 
 
@@ -273,6 +364,9 @@ def _run_stop(args: argparse.Namespace) -> None:
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    if getattr(args, "command", None) == "transcribe":
+        _cmd_transcribe(args)
+        return
     if getattr(args, "daemon", False):
         _run_daemon(args)
         return
