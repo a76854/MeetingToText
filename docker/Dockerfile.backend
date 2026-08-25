@@ -1,0 +1,73 @@
+# syntax=docker/dockerfile:1
+# ---------------------------------------------------------------------------
+# MeetingToText — backend API image (CPU-only torch by default)
+#
+# Purpose:
+#   Runs the FastAPI backend (ASR pipeline, SSE/WebSocket, LLM minutes).
+#   No frontend bundled — when frontend/dist is absent the app boots
+#   API-only gracefully (backend/app/server.py guards StaticFiles behind
+#   `if os.path.isdir(frontend_dist)`, see server.py:96).
+#
+# Build (CPU — default, recommended, image ~2-4 GB):
+#   docker build -f docker/Dockerfile.backend -t mtt:backend .
+# Build (CUDA — GPU hosts, image ~10 GB+, CUDA wheels bundled):
+#   docker build --build-arg MTT_TORCH_FLAVOR=cuda -f docker/Dockerfile.backend -t mtt:backend-cuda .
+#
+# Run:
+#   docker run --rm -p 8000:8000 -v $(pwd)/data:/data mtt:backend
+#   curl http://localhost:8000/api/health
+#
+# Volumes / ENV:
+#   The single persistent volume is /data (mounted from host ./data).
+#   ENV MTT_DATA_DIR=/data  MODELSCOPE_CACHE=/data/models
+#   Subdirectories /data/uploads /data/temp /data/logs /data/models are
+#   pre-created at build time; the server creates them at startup as well.
+# ---------------------------------------------------------------------------
+ARG MTT_TORCH_FLAVOR=cpu            # cpu | cuda  (owner-vetoable default, see plan TL;DR ⑤)
+FROM python:3.12-slim
+ARG MTT_TORCH_FLAVOR
+ENV PIP_INDEX_URL=/dev/null-placeholder
+# The placeholder above is intentionally overridden: the cpu torch install
+# uses an explicit --index-url, and subsequent pip installs need real PyPI.
+ENV PIP_INDEX_URL=https://pypi.org/simple
+ENV PIP_EXTRA_INDEX_URL=https://pypi.org/simple
+
+WORKDIR /app
+
+# System deps for soundfile / librosa (libsndfile1) — keep layer cache-friendly.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Torch flavour selection:
+#   cpu  → wheels from https://download.pytorch.org/whl/cpu (~200-400 MB,
+#          no CUDA libs; image stays ~2-4 GB with funasr stack).
+#   cuda → plain PyPI wheels that bundle CUDA (~2-4 GB extra; image size
+#          grows by an order-of-magnitude, hence cpu is the default).
+# Use conditional RUN so the Dockerfile stays ONE file and BuildKit caches
+# each branch separately keyed by ARG MTT_TORCH_FLAVOR.
+RUN if [ "$MTT_TORCH_FLAVOR" = "cuda" ]; then \
+        echo "Installing CUDA-bundled torch (large image)"; \
+        pip install --no-cache-dir torch torchaudio; \
+    else \
+        echo "Installing CPU-only torch from pytorch CPU index"; \
+        pip install --no-cache-dir torch torchaudio --index-url https://download.pytorch.org/whl/cpu; \
+    fi
+
+# Selective COPY only — never the whole repo (data/, node_modules/, models
+# must never enter the image; .dockerignore arrives in a later todo).
+COPY pyproject.toml README.md ./
+COPY backend/ ./backend/
+
+# Install the project + runtime deps (funasr, modelscope, librosa, etc.)
+# Installed AFTER torch so the torch layer is cached separately.
+RUN pip install --no-cache-dir -e .
+
+ENV MTT_DATA_DIR=/data
+ENV MODELSCOPE_CACHE=/data/models
+RUN mkdir -p /data/uploads /data/temp /data/logs /data/models
+
+EXPOSE 8000
+
+# Foreground in container; reload stays OFF (container is prod path).
+CMD ["meetingtotext", "serve", "--host", "0.0.0.0", "--port", "8000", "--log-level", "INFO", "--log-file", "/data/logs/meetingtotext.log"]
